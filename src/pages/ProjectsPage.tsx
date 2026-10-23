@@ -35,7 +35,7 @@ export default function ProjectsPage({ onBack, onOpenProject }: Props) {
   };
 
   return (
-    <PageShell title="Projects" subtitle="Deliverable Loops & Progress" onBack={onBack}>
+    <PageShell title="Projects" subtitle="Workspaces & Parts Progress" onBack={onBack}>
       <div className="flex flex-col gap-5 max-w-xl mx-auto">
         {/* Header Action: Create New Project */}
         <div className="flex items-center justify-between">
@@ -66,9 +66,6 @@ export default function ProjectsPage({ onBack, onOpenProject }: Props) {
                     <span className="text-[15px] font-medium text-white/95 group-hover:text-purple-200 transition-colors">
                       {p.name}
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                      Cycle #{p.cycleCount || 1}
-                    </span>
                   </div>
                   {p.vision && (
                     <p className="text-xs text-white/50 line-clamp-1 italic font-light">
@@ -96,7 +93,7 @@ export default function ProjectsPage({ onBack, onOpenProject }: Props) {
               {/* Bottom stage counters */}
               <div className="flex items-center justify-between text-[10px] font-mono text-white/40 mt-3 pt-2 border-t border-white/5">
                 <span>
-                  {p.stages ? `${p.stages.filter((s) => s.status === 'completed').length}/${p.stages.length} stages` : 'Stages setup'}
+                  {p.stages ? `${p.stages.filter((s) => s.status === 'completed').length}/${p.stages.length} parts` : 'Parts setup'}
                 </span>
                 <span>
                   {p.discoveries ? `${p.discoveries.length} discoveries` : '0 discoveries'}
@@ -117,7 +114,7 @@ export default function ProjectsPage({ onBack, onOpenProject }: Props) {
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/10">
               <div className="flex items-center gap-2 text-xs font-mono text-purple-300">
                 <Compass size={15} />
-                <span>New Deliverable Project</span>
+                <span>New Project</span>
               </div>
               <button
                 type="button"
@@ -144,7 +141,7 @@ export default function ProjectsPage({ onBack, onOpenProject }: Props) {
                 <textarea
                   value={newVision}
                   onChange={(e) => setNewVision(e.target.value)}
-                  placeholder="① Imagination of Deliverable: What does the finished product look & feel like?"
+                  placeholder="Deliverable Vision: What does the finished product look & feel like?"
                   className="w-full bg-white/5 border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-purple-400 resize-none min-h-[90px]"
                 />
               </div>
@@ -163,7 +160,7 @@ export default function ProjectsPage({ onBack, onOpenProject }: Props) {
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs bg-purple-600 text-white disabled:opacity-30 shadow-lg shadow-purple-900/40"
                 >
                   <Check size={14} />
-                  <span>Start Loop</span>
+                  <span>Create Project</span>
                 </button>
               </div>
             </form>

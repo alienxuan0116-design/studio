@@ -1,23 +1,87 @@
-import { projects as seedProjects, type Project, type ProjectStage, type ProjectDiscovery, type Task } from '@/data';
+import {
+  projects as seedProjects,
+  type Project,
+  type ProjectStage,
+  type ProjectDiscovery,
+  type PartSubtask,
+  type SubtaskDifficulty,
+  type ResearchData,
+  type ResearchMethod,
+  type MethodResultStatus,
+} from '@/data';
 
 const PROJECTS_STORAGE_KEY = 'planetwork_projects_v2';
 
 let memoryProjects: Project[] = seedProjects;
 
+function migrateProjectData(rawProjects: Project[]): Project[] {
+  return rawProjects.map((p) => {
+    const stages = (p.stages || []).map((s) => {
+      let subtasks: PartSubtask[] = (Array.isArray(s.subtasks) ? [...s.subtasks] : []).map((sub) => ({
+        ...sub,
+        difficulty: sub.difficulty || 'medium',
+      }));
+
+      // Preserve any legacy learningBranch notes by migrating them to a research subtask
+      if (s.learningBranch?.note && subtasks.length === 0) {
+        subtasks.push({
+          id: `sub-migrated-${s.id}`,
+          title: `Research: ${s.name}`,
+          type: 'research',
+          done: Boolean(s.learningBranch.verified),
+          difficulty: 'medium',
+          createdAt: Date.now(),
+          research: {
+            question: `Investigate core challenges for ${s.name}`,
+            investigationLog: s.learningBranch.note,
+            methods: s.learningBranch.verified
+              ? [
+                  {
+                    id: `m-migrated-${Date.now()}`,
+                    content: 'Initial solution approach',
+                    status: 'success',
+                    notes: 'Verified and applied',
+                    createdAt: Date.now(),
+                  },
+                ]
+              : [],
+          },
+        });
+      }
+
+      return {
+        ...s,
+        subtasks,
+      };
+    });
+
+    return {
+      ...p,
+      stages,
+    };
+  });
+}
+
 export function loadProjects(): Project[] {
   if (typeof localStorage === 'undefined') {
-    return memoryProjects;
+    return migrateProjectData(memoryProjects);
   }
   try {
     const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
     if (!raw) {
-      saveProjects(seedProjects);
-      return seedProjects;
+      const migrated = migrateProjectData(seedProjects);
+      saveProjects(migrated);
+      return migrated;
     }
     const parsed: Project[] = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : seedProjects;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return migrateProjectData(parsed);
+    }
+    const migrated = migrateProjectData(seedProjects);
+    saveProjects(migrated);
+    return migrated;
   } catch {
-    return seedProjects;
+    return migrateProjectData(seedProjects);
   }
 }
 
@@ -61,6 +125,7 @@ export function createProject(data: {
     id: `stage-${Date.now()}-${i}`,
     name,
     status: i === 0 ? 'in_progress' : 'pending',
+    subtasks: [],
   }));
 
   const newProj: Project = {
@@ -70,7 +135,6 @@ export function createProject(data: {
     progress: 0,
     accent: chosenAccent,
     status: 'in_progress',
-    cycleCount: 1, // Start at Loop Cycle #1
     stages: initialStages,
     discoveries: [],
   };
@@ -95,7 +159,7 @@ export function updateProject(id: string, updates: Partial<Project>): Project | 
 }
 
 /**
- * Deliverable Loop: 发现问题、记录新信息
+ * 记录新信息、发现的问题与经验
  */
 export function addProjectDiscovery(projectId: string, note: string): Project | null {
   const all = loadProjects();
@@ -113,24 +177,7 @@ export function addProjectDiscovery(projectId: string, note: string): Project | 
 }
 
 /**
- * Deliverable Loop: 回到「成品的想象」节点，重新审视目标，进入下一周目循环 (Cycle + 1)
- */
-export function advanceProjectCycle(projectId: string, updatedVision?: string): Project | null {
-  const all = loadProjects();
-  const project = all.find((p) => p.id === projectId);
-  if (!project) return null;
-
-  const nextCycle = (project.cycleCount || 1) + 1;
-  const newVision = updatedVision?.trim() ? updatedVision.trim() : project.vision;
-
-  return updateProject(projectId, {
-    cycleCount: nextCycle,
-    vision: newVision,
-  });
-}
-
-/**
- * Toggle stage status: pending -> in_progress -> completed
+ * Toggle stage (Part) status: pending -> in_progress -> completed
  */
 export function toggleStageStatus(projectId: string, stageId: string): Project | null {
   const all = loadProjects();
@@ -150,7 +197,6 @@ export function toggleStageStatus(projectId: string, stageId: string): Project |
     return s;
   });
 
-  // Calculate progress based on stages
   const completedStages = nextStages.filter((s) => s.status === 'completed').length;
   const calcProgress = Math.round((completedStages / nextStages.length) * 100);
 
@@ -161,18 +207,71 @@ export function toggleStageStatus(projectId: string, stageId: string): Project |
 }
 
 /**
- * Step-embedded learning & exploration sub-process:
- * Learn ➔ Practice ➔ Verify
+ * Part Subtasks & Research Subtasks Management
  */
-export function updateStageLearningBranch(
+export function addPartSubtask(
   projectId: string,
   stageId: string,
-  branchUpdates: Partial<{
-    active: boolean;
-    step: 1 | 2 | 3;
-    verified: boolean;
-    note: string;
-  }>
+  data: {
+    title: string;
+    type: 'regular' | 'research';
+    question?: string;
+    in_today_focus?: boolean;
+    time?: string;
+    due_date?: string;
+    difficulty?: SubtaskDifficulty;
+  }
+): { project: Project; subtask: PartSubtask } | null {
+  const all = loadProjects();
+  const project = all.find((p) => p.id === projectId);
+  if (!project || !project.stages) return null;
+
+  let createdSubtask: PartSubtask | null = null;
+
+  const nextStages = project.stages.map((s) => {
+    if (s.id === stageId) {
+      const isResearch = data.type === 'research';
+      const newSub: PartSubtask = {
+        id: `sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: data.title.trim() || (isResearch ? 'Research & Investigation' : 'New sub-task'),
+        type: data.type,
+        done: false,
+        in_today_focus: Boolean(data.in_today_focus),
+        time: data.time?.trim() || undefined,
+        due_date: data.due_date?.trim() || undefined,
+        difficulty: data.difficulty || 'medium',
+        createdAt: Date.now(),
+        ...(isResearch
+          ? {
+              research: {
+                question: data.question?.trim() || data.title.trim() || 'What question are you investigating?',
+                investigationLog: '',
+                methods: [],
+              },
+            }
+          : {}),
+      };
+      createdSubtask = newSub;
+      const subtasks = [...(s.subtasks || []), newSub];
+      return { ...s, subtasks };
+    }
+    return s;
+  });
+
+  const updatedProject = updateProject(projectId, { stages: nextStages });
+  if (updatedProject && createdSubtask) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('studio_os_tasks_changed'));
+    }
+    return { project: updatedProject, subtask: createdSubtask };
+  }
+  return null;
+}
+
+export function toggleSubtaskFocus(
+  projectId: string,
+  stageId: string,
+  subtaskId: string
 ): Project | null {
   const all = loadProjects();
   const project = all.find((p) => p.id === projectId);
@@ -180,17 +279,270 @@ export function updateStageLearningBranch(
 
   const nextStages = project.stages.map((s) => {
     if (s.id === stageId) {
-      const current = s.learningBranch || { active: true, step: 1 as const, verified: false };
-      return {
-        ...s,
-        learningBranch: {
-          ...current,
-          ...branchUpdates,
-        },
-      };
+      const subtasks = (s.subtasks || []).map((sub) => {
+        if (sub.id === subtaskId) {
+          return { ...sub, in_today_focus: !sub.in_today_focus };
+        }
+        return sub;
+      });
+      return { ...s, subtasks };
+    }
+    return s;
+  });
+
+  const updated = updateProject(projectId, { stages: nextStages });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('studio_os_tasks_changed'));
+  }
+  return updated;
+}
+
+export function updateSubtaskTime(
+  projectId: string,
+  stageId: string,
+  subtaskId: string,
+  time?: string,
+  due_date?: string
+): Project | null {
+  const all = loadProjects();
+  const project = all.find((p) => p.id === projectId);
+  if (!project || !project.stages) return null;
+
+  const nextStages = project.stages.map((s) => {
+    if (s.id === stageId) {
+      const subtasks = (s.subtasks || []).map((sub) => {
+        if (sub.id === subtaskId) {
+          return {
+            ...sub,
+            time: time?.trim() || undefined,
+            due_date: due_date?.trim() || undefined,
+          };
+        }
+        return sub;
+      });
+      return { ...s, subtasks };
+    }
+    return s;
+  });
+
+  const updated = updateProject(projectId, { stages: nextStages });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('studio_os_tasks_changed'));
+  }
+  return updated;
+}
+
+export function togglePartSubtask(
+  projectId: string,
+  stageId: string,
+  subtaskId: string
+): Project | null {
+  const all = loadProjects();
+  const project = all.find((p) => p.id === projectId);
+  if (!project || !project.stages) return null;
+
+  const nextStages = project.stages.map((s) => {
+    if (s.id === stageId) {
+      const subtasks = (s.subtasks || []).map((sub) => {
+        if (sub.id === subtaskId) {
+          return { ...sub, done: !sub.done };
+        }
+        return sub;
+      });
+      return { ...s, subtasks };
+    }
+    return s;
+  });
+
+  const updated = updateProject(projectId, { stages: nextStages });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('studio_os_tasks_changed'));
+  }
+  return updated;
+}
+
+export function deletePartSubtask(
+  projectId: string,
+  stageId: string,
+  subtaskId: string
+): Project | null {
+  const all = loadProjects();
+  const project = all.find((p) => p.id === projectId);
+  if (!project || !project.stages) return null;
+
+  const nextStages = project.stages.map((s) => {
+    if (s.id === stageId) {
+      const subtasks = (s.subtasks || []).filter((sub) => sub.id !== subtaskId);
+      return { ...s, subtasks };
+    }
+    return s;
+  });
+
+  const updated = updateProject(projectId, { stages: nextStages });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('studio_os_tasks_changed'));
+  }
+  return updated;
+}
+
+export function updatePartSubtask(
+  projectId: string,
+  stageId: string,
+  subtaskId: string,
+  updates: Partial<PartSubtask>
+): Project | null {
+  const all = loadProjects();
+  const project = all.find((p) => p.id === projectId);
+  if (!project || !project.stages) return null;
+
+  const nextStages = project.stages.map((s) => {
+    if (s.id === stageId) {
+      const subtasks = (s.subtasks || []).map((sub) => {
+        if (sub.id === subtaskId) {
+          return { ...sub, ...updates };
+        }
+        return sub;
+      });
+      return { ...s, subtasks };
+    }
+    return s;
+  });
+
+  const updated = updateProject(projectId, { stages: nextStages });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('studio_os_tasks_changed'));
+  }
+  return updated;
+}
+
+export function getPartSubtask(
+  projectId: string,
+  stageId: string,
+  subtaskId: string
+): { project: Project; stage: ProjectStage; subtask: PartSubtask } | null {
+  const project = getProject(projectId);
+  if (!project || !project.stages) return null;
+  const stage = project.stages.find((s) => s.id === stageId);
+  if (!stage || !stage.subtasks) return null;
+  const subtask = stage.subtasks.find((sub) => sub.id === subtaskId);
+  if (!subtask) return null;
+  return { project, stage, subtask };
+}
+
+/**
+ * Research Subtask Specific Data Updates:
+ * Question, Investigation Log, and Trial Methods
+ */
+export function updateResearchData(
+  projectId: string,
+  stageId: string,
+  subtaskId: string,
+  updates: Partial<ResearchData>
+): Project | null {
+  const all = loadProjects();
+  const project = all.find((p) => p.id === projectId);
+  if (!project || !project.stages) return null;
+
+  const nextStages = project.stages.map((s) => {
+    if (s.id === stageId) {
+      const subtasks = (s.subtasks || []).map((sub) => {
+        if (sub.id === subtaskId) {
+          const currentResearch: ResearchData = sub.research || {
+            question: sub.title,
+            investigationLog: '',
+            methods: [],
+          };
+          return {
+            ...sub,
+            research: {
+              ...currentResearch,
+              ...updates,
+            },
+          };
+        }
+        return sub;
+      });
+      return { ...s, subtasks };
     }
     return s;
   });
 
   return updateProject(projectId, { stages: nextStages });
+}
+
+export function addResearchMethod(
+  projectId: string,
+  stageId: string,
+  subtaskId: string,
+  content: string
+): Project | null {
+  if (!content.trim()) return null;
+  const target = getPartSubtask(projectId, stageId, subtaskId);
+  if (!target) return null;
+
+  const currentMethods = target.subtask.research?.methods || [];
+  const newMethod: ResearchMethod = {
+    id: `method-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    content: content.trim(),
+    status: 'untried',
+    notes: '',
+    createdAt: Date.now(),
+  };
+
+  return updateResearchData(projectId, stageId, subtaskId, {
+    methods: [...currentMethods, newMethod],
+  });
+}
+
+export function updateResearchMethod(
+  projectId: string,
+  stageId: string,
+  subtaskId: string,
+  methodId: string,
+  updates: Partial<ResearchMethod>
+): Project | null {
+  const target = getPartSubtask(projectId, stageId, subtaskId);
+  if (!target || !target.subtask.research) return null;
+
+  const currentMethods = target.subtask.research.methods || [];
+  let methodChangedToSuccess = false;
+
+  const nextMethods = currentMethods.map((m) => {
+    if (m.id === methodId) {
+      if (updates.status === 'success' && m.status !== 'success') {
+        methodChangedToSuccess = true;
+      }
+      return { ...m, ...updates };
+    }
+    return m;
+  });
+
+  const updatedProj = updateResearchData(projectId, stageId, subtaskId, {
+    methods: nextMethods,
+  });
+
+  // If a method succeeded, mark the subtask itself done as well (or let user keep it)
+  if (methodChangedToSuccess) {
+    updatePartSubtask(projectId, stageId, subtaskId, { done: true });
+  }
+
+  return updatedProj;
+}
+
+export function deleteResearchMethod(
+  projectId: string,
+  stageId: string,
+  subtaskId: string,
+  methodId: string
+): Project | null {
+  const target = getPartSubtask(projectId, stageId, subtaskId);
+  if (!target || !target.subtask.research) return null;
+
+  const nextMethods = (target.subtask.research.methods || []).filter(
+    (m) => m.id !== methodId
+  );
+
+  return updateResearchData(projectId, stageId, subtaskId, {
+    methods: nextMethods,
+  });
 }

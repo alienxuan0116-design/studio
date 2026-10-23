@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Check, Plus, Sparkles, PenLine } from 'lucide-react';
 import TaskList from '@/components/TaskList';
 import DateTimeCards from '@/components/DateTimeCards';
@@ -6,7 +6,6 @@ import Timeline from '@/components/Timeline';
 import ProjectProgress from '@/components/ProjectProgress';
 import IdeaButton from '@/components/IdeaButton';
 import CollapsibleSection from '@/components/CollapsibleSection';
-import OtherTasksSection from '@/components/OtherTasksSection';
 import NavDot from '@/components/NavDot';
 import WeatherStrip from '@/components/WeatherStrip';
 import SchedulePage from '@/pages/SchedulePage';
@@ -20,8 +19,18 @@ import ThemesPage from '@/pages/ThemesPage';
 import TaskDetailPage from '@/pages/TaskDetailPage';
 import NewTaskPage from '@/pages/NewTaskPage';
 import ProjectDetailPage from '@/pages/ProjectDetailPage';
-import { Scratchpad } from '@/components/Scratchpad';
-import { loadProjects } from '@/lib/projects';
+import ResearchPage from '@/pages/ResearchPage';
+import {
+  Scratchpad,
+  SCRATCHPAD_CATEGORIES,
+  type ScratchpadCategoryOption,
+} from '@/components/Scratchpad';
+import {
+  loadProjects,
+  toggleSubtaskFocus,
+  togglePartSubtask,
+  getPartSubtask,
+} from '@/lib/projects';
 import { type Task, type Project } from '@/data';
 import {
   fetchTasksByCategory,
@@ -50,7 +59,12 @@ export default function App() {
   const [page, setPage] = useState('home');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [newTaskCategory, setNewTaskCategory] = useState<'essential' | 'focus' | 'other' | null>(null);
+  const [activeResearch, setActiveResearch] = useState<{
+    projectId: string;
+    partId: string;
+    subtaskId: string;
+  } | null>(null);
+  const [newTaskCategory, setNewTaskCategory] = useState<'essential' | 'focus' | null>(null);
 
   const [ess, setEss] = useState<Task[]>([]);
   const [focus, setFocus] = useState<Task[]>([]);
@@ -142,7 +156,7 @@ export default function App() {
     }
   };
 
-  const handleOpenNewTask = (cat: 'essential' | 'focus' | 'other') => {
+  const handleOpenNewTask = (cat: 'essential' | 'focus') => {
     setNewTaskCategory(cat);
   };
 
@@ -213,22 +227,27 @@ export default function App() {
 
   const handleOrganizeScratchNote = async (
     noteId: string,
-    category: 'essential' | 'focus' | 'other',
+    categoryOption: ScratchpadCategoryOption,
     options?: { priority?: 'high' | 'medium' | 'low'; time?: string; date?: string }
   ) => {
     const note = scratchNotes.find((n) => n.id === noteId);
     if (!note || note.is_organized) return;
 
-    // 1. 创建正式任务进入对应分类，保留重点状态，并应用指定的难度、时间与日期
+    const catDef = SCRATCHPAD_CATEGORIES.find((c) => c.id === categoryOption) || {
+      category: 'focus' as const,
+      task_type: 'single' as const,
+    };
+
+    // 1. 创建正式任务进入对应分类与类型，保留重点状态，并应用指定的难度、时间与日期
     const created = await createTask({
       label: note.content,
-      category,
+      category: catDef.category,
+      task_type: catDef.task_type,
       priority: options?.priority || 'medium',
       due_time: options?.time || null,
       due_date: options?.date || null,
       is_priority: note.is_priority, // 保留重点状态
       done: false,
-      task_type: category === 'essential' ? 'essential' : category === 'focus' ? 'project' : 'single',
     });
 
     // 2. 速记板中对应记录显示划掉状态，移动至底部，记录 organized_at 时间戳
@@ -238,7 +257,7 @@ export default function App() {
             ...n,
             is_organized: true,
             organized_at: Date.now(),
-            target_category: category,
+            target_category: categoryOption,
             linked_task_id: created?.id,
           }
         : n
@@ -256,13 +275,114 @@ export default function App() {
     saveScratchNotes(next);
   };
 
+  // ---- Subtasks joined into Today's Focus ----
+  const focusSubtasks = useMemo<Task[]>(() => {
+    const list: Task[] = [];
+    projectList.forEach((proj) => {
+      (proj.stages || []).forEach((stage) => {
+        (stage.subtasks || []).forEach((sub) => {
+          if (sub.in_today_focus) {
+            list.push({
+              id: `subtask::${proj.id}::${stage.id}::${sub.id}`,
+              label: `${stage.name} · ${sub.title}`,
+              part_name: stage.name,
+              subtask_title: sub.title,
+              done: sub.done,
+              tag: proj.name,
+              start: sub.time,
+              due: sub.time,
+              due_date: sub.due_date,
+              priority: sub.type === 'research' ? 'high' : 'medium',
+              is_priority: sub.type === 'research',
+              category: 'focus',
+              is_subtask: true,
+              subtask_type: sub.type,
+              project_id: proj.id,
+              part_id: stage.id,
+              subtask_id: sub.id,
+              created_at: sub.createdAt,
+            });
+          }
+        });
+      });
+    });
+    return list;
+  }, [projectList]);
+
+  // Combined Focus tasks (focus category tasks + Part subtasks added to focus)
+  const combinedFocusTasks = useMemo(() => {
+    return sortTasksByPriorityAndTime([...focus, ...focusSubtasks]);
+  }, [focus, focusSubtasks]);
+
+  // Handlers for Today's Focus items (handles both standalone tasks and subtasks)
+  const handleToggleFocusTask = async (id: string) => {
+    if (id.startsWith('subtask::')) {
+      const parts = id.split('::');
+      const projId = parts[1];
+      const stageId = parts[2];
+      const subId = parts[3];
+      togglePartSubtask(projId, stageId, subId);
+      setProjectList(loadProjects());
+    } else {
+      toggleTask(setFocus)(id);
+    }
+  };
+
+  const handleOpenFocusTask = (id: string) => {
+    if (id.startsWith('subtask::')) {
+      const parts = id.split('::');
+      const projId = parts[1];
+      const stageId = parts[2];
+      const subId = parts[3];
+      const target = getPartSubtask(projId, stageId, subId);
+      if (target?.subtask.type === 'research') {
+        setActiveResearch({ projectId: projId, partId: stageId, subtaskId: subId });
+        setPage('research');
+      } else {
+        setActiveProjectId(projId);
+        setPage('project-detail');
+      }
+    } else {
+      openTask(id);
+    }
+  };
+
+  const handleToggleFocusPriority = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (id.startsWith('subtask::')) {
+      const parts = id.split('::');
+      const projId = parts[1];
+      const stageId = parts[2];
+      const subId = parts[3];
+      // 移出 Today's Focus（不删除原任务）
+      toggleSubtaskFocus(projId, stageId, subId);
+      setProjectList(loadProjects());
+    } else {
+      togglePriority(id, e);
+    }
+  };
+
   // ---- Sorted Task Lists (Priority first, then time ordered) ----
   const sortedEss = sortTasksByPriorityAndTime(ess);
-  const sortedFocus = sortTasksByPriorityAndTime(focus);
   const sortedOther = sortTasksByPriorityAndTime(other);
 
   // ---- Full pages ----
-  if (page === 'schedule') return <SchedulePage onBack={back} onOpenTask={openTask} />;
+  if (page === 'schedule')
+    return (
+      <SchedulePage
+        onBack={back}
+        onOpenTask={openTask}
+        onOpenProject={(id) => {
+          setActiveProjectId(id);
+          setPage('project-detail');
+        }}
+        onOpenResearch={(projectId, partId, subtaskId) => {
+          setActiveProjectId(projectId);
+          setActiveResearch({ projectId, partId, subtaskId });
+          setPage('research');
+        }}
+      />
+    );
   if (page === 'projects')
     return (
       <ProjectsPage
@@ -277,13 +397,26 @@ export default function App() {
     return (
       <ProjectDetailPage
         projectId={activeProjectId}
-        tasks={[...ess, ...focus, ...other]}
         onBack={() => {
           setProjectList(loadProjects());
           setPage('projects');
         }}
-        onOpenTask={openTask}
-        onRefreshTasks={loadAll}
+        onOpenResearch={(partId, subtaskId) => {
+          setActiveResearch({ projectId: activeProjectId, partId, subtaskId });
+          setPage('research');
+        }}
+      />
+    );
+  if (page === 'research' && activeResearch)
+    return (
+      <ResearchPage
+        projectId={activeResearch.projectId}
+        partId={activeResearch.partId}
+        subtaskId={activeResearch.subtaskId}
+        onBack={() => {
+          setProjectList(loadProjects());
+          setPage('project-detail');
+        }}
       />
     );
   if (page === 'routine')
@@ -299,10 +432,10 @@ export default function App() {
   if (page === 'focus-detail')
     return (
       <FocusPage
-        tasks={sortedFocus}
-        onToggle={toggleTask(setFocus)}
-        onOpenTask={openTask}
-        onTogglePriority={togglePriority}
+        tasks={combinedFocusTasks}
+        onToggle={handleToggleFocusTask}
+        onOpenTask={handleOpenFocusTask}
+        onTogglePriority={handleToggleFocusPriority}
         onBack={back}
       />
     );
@@ -366,7 +499,7 @@ export default function App() {
               <IdeaButton onClick={() => navigate('new-space')} />
             </div>
 
-            {/* Right: Scratchpad Icon (Equal distance from center, in the top-right position circled by user) */}
+            {/* Right: Scratchpad Icon (Equal distance from center, clean button without circular badge) */}
             <div className="flex items-center">
               <button
                 type="button"
@@ -376,31 +509,23 @@ export default function App() {
                 className="relative w-11 h-11 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center bg-black/60 hover:bg-black/40 border border-white/20 glass glass-glow shadow-lg shadow-black/40 hover:scale-105 active:scale-95 transition-all group backdrop-blur-2xl"
               >
                 <PenLine size={18} strokeWidth={1.8} className="text-purple-300 group-hover:scale-110 transition-transform" />
-                {scratchNotes.some((n) => !n.is_organized) && (
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-purple-400 ring-2 ring-black/40 animate-pulse" />
-                )}
               </button>
             </div>
           </header>
 
           <div className="flex flex-col gap-5 sm:gap-6 min-w-0 w-full">
-            {/* 2. Date & Time */}
+            {/* 1. Date & Time */}
             <DateTimeCards onNavigate={navigate} />
 
-            {/* 3. Weather strip */}
+            {/* Weather strip */}
             <WeatherStrip />
 
-            {/* 4. Schedule */}
+            {/* 2. Schedule / Timeline */}
             <div id="schedule">
               <Timeline onNavigate={navigate} />
             </div>
 
-            {/* 5. Project Progress */}
-            <div id="projects">
-              <ProjectProgress projects={projectList} onNavigate={navigate} />
-            </div>
-
-            {/* 6. Daily Essentials: + 添加任务，○ 打开分类详情页 */}
+            {/* 3. Essential / 必备: + 添加任务，○ 打开分类详情页 */}
             <CollapsibleSection
               kicker="Daily"
               title="Essentials"
@@ -418,7 +543,13 @@ export default function App() {
               )}
             </CollapsibleSection>
 
-            {/* 7. Today's Focus (Priority): + 添加任务，○ 打开分类详情页 */}
+
+            {/* 5. 项目进度 (Project Progress) */}
+            <div id="projects">
+              <ProjectProgress projects={projectList} onNavigate={navigate} />
+            </div>
+
+            {/* 6. Today's Focus: 包含独立焦点任务与加入 Today's Focus 的制作/研究子任务 */}
             <div id="focus">
               <CollapsibleSection
                 kicker="Priority"
@@ -429,25 +560,15 @@ export default function App() {
               >
                 {(visible) => (
                   <TaskList
-                    tasks={visible === -1 ? sortedFocus : sortedFocus.slice(0, visible)}
-                    onToggle={toggleTask(setFocus)}
-                    onOpenTask={openTask}
-                    onTogglePriority={togglePriority}
-                    showTime={false}
+                    tasks={visible === -1 ? combinedFocusTasks : combinedFocusTasks.slice(0, visible)}
+                    onToggle={handleToggleFocusTask}
+                    onOpenTask={handleOpenFocusTask}
+                    onTogglePriority={handleToggleFocusPriority}
+                    showTime={true}
                   />
                 )}
               </CollapsibleSection>
             </div>
-
-            {/* 8. Other Tasks: + 添加任务，○ 打开分类详情页 */}
-            <OtherTasksSection
-              tasks={sortedOther}
-              onToggle={toggleTask(setOther)}
-              onNavigate={() => navigate('task-list')}
-              onAdd={() => handleOpenNewTask('other')}
-              onOpenTask={openTask}
-              onTogglePriority={togglePriority}
-            />
 
             <footer className="text-center text-[11px] text-white/25 tracking-wide py-4">
               {new Date().getFullYear()} Studio OS

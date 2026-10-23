@@ -3,16 +3,11 @@ import {
   Pencil,
   Sparkles,
   Clock,
-  CheckCircle2,
-  Play,
-  Pause,
   RotateCcw,
-  CalendarClock,
   Ban,
   Plus,
   Trash2,
   Layers,
-  Lightbulb,
   Check,
   FolderGit2,
   ExternalLink,
@@ -25,7 +20,6 @@ import {
   toggleTaskStep,
   deleteTaskStep,
   setTaskStatus,
-  postponeTask,
   linkTaskToProject,
   applyAiMicroSteps,
   type TaskRow,
@@ -56,14 +50,6 @@ export default function TaskDetailPage({
   // Micro-step input
   const [newStepLabel, setNewStepLabel] = useState('');
   const [addingStep, setAddingStep] = useState(false);
-
-  // AI Stagnation Diagnosis drawer/panel
-  const [showAiDiagnosis, setShowAiDiagnosis] = useState(false);
-  const [isDiagnosing, setIsDiagnosing] = useState(false);
-  const [diagnosisResult, setDiagnosisResult] = useState<{
-    reason: string;
-    suggestions: string[];
-  } | null>(null);
 
   // Projects list for linking
   const [projects, setProjects] = useState<Project[]>([]);
@@ -137,7 +123,7 @@ export default function TaskDetailPage({
     onUpdated?.();
   };
 
-  const handleCategoryChange = async (category: 'essential' | 'focus' | 'other') => {
+  const handleCategoryChange = async (category: 'essential' | 'focus') => {
     if (!task) return;
     const updated = { ...task, category };
     setTask(updated);
@@ -190,14 +176,6 @@ export default function TaskDetailPage({
     setConfirmingDrop(false);
   };
 
-  const handlePostpone = async (amount: '1h' | '1d') => {
-    if (!task) return;
-    const updated = await postponeTask(task.id, amount);
-    if (updated) {
-      setTask(updated);
-      onUpdated?.();
-    }
-  };
 
   // Step breakdown operations
   const handleAddStep = async (e: React.FormEvent) => {
@@ -226,48 +204,6 @@ export default function TaskDetailPage({
     const updated = await deleteTaskStep(task.id, stepId);
     if (updated) {
       setTask(updated);
-      onUpdated?.();
-    }
-  };
-
-  // AI Stagnation Diagnosis
-  const handleRunAiDiagnosis = () => {
-    if (!task) return;
-    setIsDiagnosing(true);
-    setShowAiDiagnosis(true);
-
-    setTimeout(() => {
-      // Contextual diagnosis based on task label & difficulty
-      const isHighDiff = task.priority === 'high';
-      const label = task.label;
-
-      let reason = 'Action barrier: Task entry threshold is too large. Cognitive resistance is creating hesitation.';
-      let suggestions = [
-        `Write down the single most essential outcome of "${label}" in 1 sentence.`,
-        `Gather 1 reference or template example (5 minutes max).`,
-        `Draft the first 3 bullet points without seeking perfection.`,
-      ];
-
-      if (isHighDiff) {
-        reason = 'High-friction complexity: Multi-variable requirements are triggering perfectionist delay.';
-        suggestions = [
-          `Deconstruct into an ultra-low-friction sandbox prototype.`,
-          `Execute a 10-minute focus burst on the smallest single sub-element.`,
-          `Validate the prototype and note discoveries in your journal.`,
-        ];
-      }
-
-      setDiagnosisResult({ reason, suggestions });
-      setIsDiagnosing(false);
-    }, 600);
-  };
-
-  const handleAdoptMicroSteps = async () => {
-    if (!task || !diagnosisResult) return;
-    const updated = await applyAiMicroSteps(task.id, diagnosisResult.suggestions);
-    if (updated) {
-      setTask(updated);
-      setShowAiDiagnosis(false);
       onUpdated?.();
     }
   };
@@ -461,7 +397,7 @@ export default function TaskDetailPage({
                 <div className="flex items-center justify-between text-[11px] font-mono text-white/50">
                   <span>Category</span>
                   <div className="flex items-center gap-1">
-                    {(['essential', 'focus', 'other'] as const).map((cat) => (
+                    {(['essential', 'focus'] as const).map((cat) => (
                       <button
                         key={cat}
                         type="button"
@@ -499,171 +435,25 @@ export default function TaskDetailPage({
         </div>
 
         {/* =====================================================================
-            2. ACTION CONTROLLER (开始 / 继续 / 暂停 / 延期 / 放弃 / 完成)
-            Zero-anxiety action controls
+            2. ACTION CONTROLLER: 仅保留 Drop（独占一行）
             ===================================================================== */}
-        <div className="glass glass-glow rounded-3xl p-4 border border-white/10 space-y-3">
-          <div className="flex items-center justify-between text-[11px] font-mono text-white/50 px-1">
-            <span className="flex items-center gap-1.5">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  status === 'in_progress'
-                    ? 'bg-sky-400 animate-pulse'
-                    : status === 'completed'
-                    ? 'bg-emerald-400'
-                    : status === 'paused'
-                    ? 'bg-amber-400'
-                    : 'bg-purple-400'
-                }`}
-              />
-              <span className="uppercase tracking-wider">
-                Status: {status.replace('_', ' ')}
-              </span>
-            </span>
-
-            {/* AI Diagnose Stagnation Button */}
-            <button
-              type="button"
-              onClick={handleRunAiDiagnosis}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-mono bg-purple-500/20 text-purple-200 border border-purple-500/35 hover:bg-purple-500/30 transition-all shadow-[0_0_12px_rgba(168,85,247,0.2)]"
-            >
-              <Lightbulb size={11} className="text-purple-300" />
-              <span>AI Stagnation Assist</span>
-            </button>
-          </div>
-
-          {/* Action buttons pill matrix */}
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 pt-1 text-[11px] sm:text-xs font-medium">
-            {/* Start / Resume */}
-            {status !== 'in_progress' ? (
-              <button
-                type="button"
-                onClick={() => handleSetStatus('in_progress')}
-                className="flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-2.5 rounded-2xl bg-sky-500/20 text-sky-200 border border-sky-500/40 hover:bg-sky-500/30 transition-all active:scale-95"
-              >
-                <Play size={12} fill="currentColor" />
-                <span className="truncate">Start</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => handleSetStatus('paused')}
-                className="flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-2.5 rounded-2xl bg-amber-500/20 text-amber-200 border border-amber-500/40 hover:bg-amber-500/30 transition-all active:scale-95"
-              >
-                <Pause size={12} fill="currentColor" />
-                <span className="truncate">Pause</span>
-              </button>
-            )}
-
-            {/* Postpone: +1h or Tomorrow */}
-            <button
-              type="button"
-              onClick={() => handlePostpone('1h')}
-              title="Postpone by 1 hour"
-              className="flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-2.5 rounded-2xl bg-white/5 text-white/70 hover:text-white border border-white/10 hover:bg-white/10 transition-all active:scale-95"
-            >
-              <CalendarClock size={12} />
-              <span className="truncate">+1 Hour</span>
-            </button>
-
-            {/* Abandon: Zero guilt drop with soft confirmation against accidental clicks */}
-            <button
-              type="button"
-              onClick={handleDropClick}
-              title={confirmingDrop ? 'Tap again to confirm drop' : 'Drop without guilt'}
-              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-2.5 rounded-2xl border transition-all active:scale-95 ${
-                confirmingDrop
-                  ? 'bg-rose-500/30 text-rose-200 border-rose-400 animate-pulse'
-                  : status === 'abandoned'
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                  : 'bg-white/5 text-white/40 hover:text-rose-300 border-white/10 hover:border-rose-500/30'
-              }`}
-            >
-              <Ban size={12} />
-              <span className="truncate">{confirmingDrop ? 'Confirm?' : status === 'abandoned' ? 'Dropped' : 'Drop'}</span>
-            </button>
-
-            {/* Complete / Toggle Done */}
-            <button
-              type="button"
-              onClick={() => handleSetStatus(status === 'completed' ? 'in_progress' : 'completed')}
-              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-2.5 rounded-2xl border transition-all active:scale-95 ${
-                status === 'completed' || task.done
-                  ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.5)]'
-                  : 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40 hover:bg-emerald-500/30'
-              }`}
-            >
-              <CheckCircle2 size={12} />
-              <span className="truncate">{status === 'completed' ? 'Done' : 'Complete'}</span>
-            </button>
-          </div>
+        <div className="glass glass-glow rounded-3xl p-3 sm:p-4 border border-white/10">
+          <button
+            type="button"
+            onClick={handleDropClick}
+            title={confirmingDrop ? 'Tap again to confirm drop' : 'Drop without guilt'}
+            className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl text-xs font-medium border transition-all active:scale-[0.99] ${
+              confirmingDrop
+                ? 'bg-rose-500/30 text-rose-200 border-rose-400 animate-pulse'
+                : status === 'abandoned'
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                : 'bg-white/5 text-white/50 hover:text-rose-300 border-white/10 hover:border-rose-500/30'
+            }`}
+          >
+            <Ban size={14} />
+            <span>{confirmingDrop ? 'Confirm Drop?' : status === 'abandoned' ? 'Task Dropped (Click to restore)' : 'Drop Task'}</span>
+          </button>
         </div>
-
-        {/* =====================================================================
-            3. AI STAGNATION DIAGNOSIS MODAL / PANEL (诊断停滞原因并调整步骤)
-            ===================================================================== */}
-        {showAiDiagnosis && (
-          <div className="glass glass-glow rounded-3xl p-5 border border-purple-500/40 space-y-4 animate-in fade-in duration-200 bg-purple-950/20 shadow-[0_0_30px_rgba(168,85,247,0.15)]">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <Lightbulb size={15} className="text-purple-300 animate-pulse" />
-                <span className="text-xs font-mono uppercase tracking-wider text-purple-200">
-                  AI Action Barrier Diagnosis
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAiDiagnosis(false)}
-                className="text-white/40 hover:text-white text-xs"
-              >
-                Dismiss
-              </button>
-            </div>
-
-            {isDiagnosing ? (
-              <div className="py-6 text-center text-xs text-purple-300/70 font-mono animate-pulse">
-                Analyzing cognitive friction and breaking down 5-min starter actions...
-              </div>
-            ) : diagnosisResult ? (
-              <div className="space-y-3.5">
-                <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-100/90 leading-relaxed font-light">
-                  <span className="font-medium text-purple-300 block mb-1">
-                    Diagnosis:
-                  </span>
-                  {diagnosisResult.reason}
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-white/50 block">
-                    Recommended 5-Minute Micro-Steps:
-                  </span>
-                  <div className="space-y-1.5">
-                    {diagnosisResult.suggestions.map((sug, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-2 p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-white/80"
-                      >
-                        <span className="w-4 h-4 rounded-full bg-purple-500/20 text-purple-300 flex items-center justify-center text-[10px] font-mono shrink-0 mt-0.5">
-                          {i + 1}
-                        </span>
-                        <span>{sug}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleAdoptMicroSteps}
-                  className="w-full py-2.5 px-4 rounded-2xl text-xs font-medium bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg shadow-purple-950 flex items-center justify-center gap-2 transition-all active:scale-98"
-                >
-                  <Sparkles size={13} />
-                  <span>Adopt Micro-Steps into Checklist</span>
-                </button>
-              </div>
-            ) : null}
-          </div>
-        )}
 
         {/* =====================================================================
             4. STEP BREAKDOWN & CHECKLIST (支持步骤拆解与进度更新)

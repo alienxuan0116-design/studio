@@ -3,6 +3,38 @@ import { Sparkles, X, Plus, FolderInput, CheckCircle2 } from 'lucide-react';
 import { ScratchNote, THREE_DAYS_MS } from '@/lib/tasks';
 import DateTimePicker from '@/components/DateTimePicker';
 
+export type ScratchpadCategoryOption =
+  | 'essential'
+  | 'single'
+  | 'project'
+  | 'learning'
+  | 'other'
+  | 'focus';
+
+export interface ScratchpadCategoryDef {
+  id: ScratchpadCategoryOption;
+  label: string;
+  category: 'essential' | 'focus' | 'other';
+  task_type: 'essential' | 'single' | 'project' | 'learning';
+}
+
+export const SCRATCHPAD_CATEGORIES: ScratchpadCategoryDef[] = [
+  { id: 'essential', label: 'Essential / 必备', category: 'essential', task_type: 'essential' },
+  { id: 'single', label: '单次任务', category: 'focus', task_type: 'single' },
+  { id: 'project', label: '短期项目', category: 'focus', task_type: 'project' },
+  { id: 'learning', label: '长期学习', category: 'focus', task_type: 'learning' },
+];
+
+export function getCategoryLabel(target?: string): string {
+  if (!target) return 'Unorganized';
+  if (target === 'essential') return 'Essential / 必备';
+  if (target === 'single') return '单次任务';
+  if (target === 'project' || target === 'focus') return '短期项目';
+  if (target === 'learning') return '长期学习';
+  if (target === 'other') return 'Other / 其他';
+  return target;
+}
+
 interface ScratchpadProps {
   isOpen: boolean;
   onClose: () => void;
@@ -11,17 +43,11 @@ interface ScratchpadProps {
   onToggleNotePriority: (noteId: string) => void;
   onOrganizeNote: (
     noteId: string,
-    category: 'essential' | 'focus' | 'other',
+    category: ScratchpadCategoryOption,
     options?: { priority?: 'high' | 'medium' | 'low'; time?: string; date?: string }
   ) => void;
   onDeleteNote: (noteId: string) => void;
 }
-
-const CATEGORIES: { id: 'essential' | 'focus' | 'other'; label: string }[] = [
-  { id: 'essential', label: 'Daily Essentials' },
-  { id: 'focus', label: "Today's Focus" },
-  { id: 'other', label: 'Other Tasks' },
-];
 
 export function Scratchpad({
   isOpen,
@@ -208,7 +234,7 @@ export function Scratchpad({
 
                             {/* Target Category Buttons to Save */}
                             <div className="flex flex-wrap gap-1.5 pt-1">
-                              {CATEGORIES.map((cat) => (
+                              {SCRATCHPAD_CATEGORIES.map((cat) => (
                                 <button
                                   key={cat.id}
                                   type="button"
@@ -249,7 +275,7 @@ export function Scratchpad({
                   </div>
 
                   {organizedNotes.map((note) => {
-                    const targetCategory = CATEGORIES.find((c) => c.id === note.target_category);
+                    const categoryLabel = getCategoryLabel(note.target_category);
                     const elapsed = note.organized_at ? Date.now() - note.organized_at : 0;
                     const remainingMs = Math.max(0, THREE_DAYS_MS - elapsed);
                     const remainingHours = Math.ceil(remainingMs / (3600 * 1000));
@@ -266,9 +292,9 @@ export function Scratchpad({
                         </div>
 
                         <div className="flex items-center gap-2 text-[10px] shrink-0 font-mono">
-                          {targetCategory && (
-                            <span className="px-2 py-0.5 rounded-md bg-white/5 text-white/50">
-                              {targetCategory.label}
+                          {categoryLabel && (
+                            <span className="px-2 py-0.5 rounded-md bg-white/5 text-white/60">
+                              {categoryLabel}
                             </span>
                           )}
                           <span className="text-white/35" title="Remaining time before scratchpad purge">

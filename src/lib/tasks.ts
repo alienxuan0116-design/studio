@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { essentials, focusTasks, otherTasks, type Task } from '@/data';
+import { loadProjects, updateSubtaskTime } from '@/lib/projects';
 
 export interface TaskRow {
   id: string;
@@ -36,7 +37,7 @@ export interface ScratchNote {
   created_at: number;
   is_organized: boolean;
   organized_at?: number; // 归类完成的时间戳，保留 3 天后自动清除副本
-  target_category?: 'essential' | 'focus' | 'other';
+  target_category?: 'essential' | 'focus' | 'other' | string;
   linked_task_id?: string;
 }
 
@@ -548,3 +549,99 @@ export function saveScratchNotes(notes: ScratchNote[]): void {
     console.error('Failed to save scratch notes', e);
   }
 }
+
+export interface UnifiedScheduleTask {
+  id: string; // "task-xxx" or "subtask::projId::stageId::subId"
+  rawId: string;
+  title: string;
+  done: boolean;
+  is_priority?: boolean;
+  priority?: string; // difficulty: 'low' | 'medium' | 'high' | 'extreme'
+  due_date?: string; // YYYY-MM-DD
+  due_time?: string; // HH:mm
+  sourceType: 'task' | 'subtask_regular' | 'subtask_research';
+  category?: string;
+  part_name?: string;
+  project_name?: string;
+  projectId?: string;
+  stageId?: string;
+  subtaskId?: string;
+}
+
+export function getAllScheduleTasks(): UnifiedScheduleTask[] {
+  const result: UnifiedScheduleTask[] = [];
+
+  // 1. Regular tasks from local storage
+  const tasks = loadLocalTasks();
+  tasks.forEach((t) => {
+    result.push({
+      id: t.id,
+      rawId: t.id,
+      title: t.label,
+      done: Boolean(t.done),
+      is_priority: Boolean(t.is_priority),
+      priority: t.priority || 'medium',
+      due_date: t.due_date?.trim() || undefined,
+      due_time: (t.due_time || t.start_time)?.trim() || undefined,
+      sourceType: 'task',
+      category: t.category,
+      project_name: t.tag || undefined,
+      projectId: t.project_id || undefined,
+    });
+  });
+
+  // 2. Part subtasks (regular and research) from projects
+  const projects = loadProjects();
+  projects.forEach((proj) => {
+    (proj.stages || []).forEach((stage) => {
+      (stage.subtasks || []).forEach((sub) => {
+        result.push({
+          id: `subtask::${proj.id}::${stage.id}::${sub.id}`,
+          rawId: sub.id,
+          title: sub.title,
+          done: Boolean(sub.done),
+          is_priority: Boolean(sub.in_today_focus),
+          priority: sub.difficulty || 'medium',
+          due_date: sub.due_date?.trim() || undefined,
+          due_time: sub.time?.trim() || undefined,
+          sourceType: sub.type === 'research' ? 'subtask_research' : 'subtask_regular',
+          category: 'project',
+          part_name: stage.name,
+          project_name: proj.name,
+          projectId: proj.id,
+          stageId: stage.id,
+          subtaskId: sub.id,
+        });
+      });
+    });
+  });
+
+  return result;
+}
+
+export async function updateUnifiedTaskSchedule(
+  id: string,
+  due_date?: string | null,
+  due_time?: string | null
+): Promise<void> {
+  const dateVal = due_date?.trim() || undefined;
+  const timeVal = due_time?.trim() || undefined;
+
+  if (id.startsWith('subtask::')) {
+    const parts = id.split('::');
+    const projId = parts[1];
+    const stageId = parts[2];
+    const subId = parts[3];
+    updateSubtaskTime(projId, stageId, subId, timeVal, dateVal);
+  } else {
+    await updateTask(id, {
+      due_date: dateVal || null,
+      due_time: timeVal || null,
+    });
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('studio_os_tasks_changed'));
+  }
+}
+

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Sparkles, Pencil, Zap, Clock } from 'lucide-react';
+import { Check, Sparkles, Pencil, Clock } from 'lucide-react';
 import type { Task } from '@/data';
 
 interface Props {
@@ -95,19 +95,43 @@ export default function TaskList({
                 </span>
               )}
 
-              {/* 任务名称：核心重点，手机版与桌面版均清晰呈现，单行截断防止遮挡 */}
-              <span
-                className={`text-[13px] sm:text-sm font-medium leading-normal truncate flex-1 min-w-0 transition-all duration-200 ${
-                  task.done
-                    ? 'text-white/40 line-through'
-                    : isPriority
-                    ? 'text-purple-200/90 font-medium'
-                    : 'text-white/90'
-                }`}
-                title={task.label}
-              >
-                {task.label}
-              </span>
+              {/* 任务名称：核心重点，如果属于 Part 则显示所属 Part · 子任务名称 */}
+              {task.part_name ? (
+                <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden">
+                  <span
+                    className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/25 shrink-0 max-w-[130px] truncate"
+                    title={task.part_name}
+                  >
+                    {task.part_name}
+                  </span>
+                  <span className="text-white/40 text-xs shrink-0">·</span>
+                  <span
+                    className={`text-[13px] sm:text-sm font-medium leading-normal truncate flex-1 min-w-0 transition-all duration-200 ${
+                      task.done
+                        ? 'text-white/40 line-through'
+                        : isPriority
+                        ? 'text-purple-200/90 font-medium'
+                        : 'text-white/90'
+                    }`}
+                    title={task.label}
+                  >
+                    {task.subtask_title || task.label}
+                  </span>
+                </div>
+              ) : (
+                <span
+                  className={`text-[13px] sm:text-sm font-medium leading-normal truncate flex-1 min-w-0 transition-all duration-200 ${
+                    task.done
+                      ? 'text-white/40 line-through'
+                      : isPriority
+                      ? 'text-purple-200/90 font-medium'
+                      : 'text-white/90'
+                  }`}
+                  title={task.label}
+                >
+                  {task.label}
+                </span>
+              )}
 
               {/* 时间微型Tag：仅在未隐藏时展示 */}
               {showTime && (task.start || task.due) && (
@@ -118,21 +142,8 @@ export default function TaskList({
               )}
             </div>
 
-            {/* [右] 操作按钮组：[⚡ Stuck/Skill] + [✦ Important] + [✎ Edit] */}
+            {/* [右] 操作按钮组：[✦ Important] + [✎ Edit] */}
             <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-              {/* [⚡ Stuck / Skill] button */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenSkillDrawer ? onOpenSkillDrawer(task) : onOpenTask?.(task.id);
-                }}
-                title="Stuck? Need skill"
-                className="p-1 sm:p-1.5 rounded-xl text-amber-300/80 hover:text-amber-200 hover:bg-amber-500/20 active:scale-95 transition-all"
-              >
-                <Zap size={14} className="fill-amber-400/20" />
-              </button>
-
               {/* [✦ Important] Priority button */}
               <button
                 type="button"

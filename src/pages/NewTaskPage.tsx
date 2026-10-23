@@ -6,12 +6,12 @@ import type { Project } from '@/data';
 import DateTimePicker from '@/components/DateTimePicker';
 
 interface Props {
-  initialCategory?: 'essential' | 'focus' | 'other';
+  initialCategory?: 'essential' | 'focus';
   onBack: () => void;
   onCreated: (task: TaskRow) => void;
 }
 
-export default function NewTaskPage({ initialCategory = 'other', onBack, onCreated }: Props) {
+export default function NewTaskPage({ initialCategory = 'focus', onBack, onCreated }: Props) {
   const [label, setLabel] = useState('');
   const [difficulty, setDifficulty] = useState<'low' | 'medium' | 'high'>('medium');
   const [date, setDate] = useState('');
@@ -26,10 +26,9 @@ export default function NewTaskPage({ initialCategory = 'other', onBack, onCreat
 
   const isLabelValid = label.trim().length > 0;
 
-  const categoryNameMap = {
+  const categoryNameMap: Record<string, string> = {
     essential: 'Daily Essentials',
     focus: "Today's Focus",
-    other: 'Other Tasks',
   };
 
   const handleSave = async (e?: React.FormEvent) => {
@@ -49,7 +48,7 @@ export default function NewTaskPage({ initialCategory = 'other', onBack, onCreat
         tag: selectedProj ? selectedProj.name : null,
         is_priority: false, // Priority default off
         done: false,
-        task_type: initialCategory === 'essential' ? 'essential' : initialCategory === 'focus' ? 'project' : 'single',
+        task_type: initialCategory === 'essential' ? 'essential' : 'project',
       });
 
       if (created) {

@@ -1,0 +1,6 @@
+{
+  "name": "Studio OS",
+  "description": "Minimalist studio operating system with task management, priority cards, and quick scratchpad.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

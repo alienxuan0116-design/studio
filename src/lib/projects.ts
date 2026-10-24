@@ -15,11 +15,26 @@ const PROJECTS_STORAGE_KEY = 'planetwork_projects_v2';
 let memoryProjects: Project[] = seedProjects;
 
 function migrateProjectData(rawProjects: Project[]): Project[] {
-  return rawProjects.map((p) => {
+  let workingList = rawProjects;
+  const hasAudienceAnim = rawProjects.some((p) => p.id === 'proj-audience-animation');
+  if (!hasAudienceAnim) {
+    const seedAudience = seedProjects.find((p) => p.id === 'proj-audience-animation');
+    if (seedAudience) {
+      workingList = [seedAudience, ...rawProjects];
+    }
+  }
+
+  return workingList.map((p) => {
+    const category_ids = Array.isArray(p.category_ids)
+      ? p.category_ids
+      : p.id === 'proj-audience-animation'
+      ? ['cat-animation']
+      : [];
+
     const stages = (p.stages || []).map((s) => {
       let subtasks: PartSubtask[] = (Array.isArray(s.subtasks) ? [...s.subtasks] : []).map((sub) => ({
         ...sub,
-        difficulty: sub.difficulty || 'medium',
+        difficulty: ((sub.difficulty as string) === 'extreme' ? 'high' : sub.difficulty) || 'medium',
       }));
 
       // Preserve any legacy learningBranch notes by migrating them to a research subtask
@@ -57,6 +72,7 @@ function migrateProjectData(rawProjects: Project[]): Project[] {
 
     return {
       ...p,
+      category_ids,
       stages,
     };
   });
@@ -302,7 +318,9 @@ export function updateSubtaskTime(
   stageId: string,
   subtaskId: string,
   time?: string,
-  due_date?: string
+  due_date?: string,
+  start_date?: string,
+  start_time?: string
 ): Project | null {
   const all = loadProjects();
   const project = all.find((p) => p.id === projectId);
@@ -316,6 +334,8 @@ export function updateSubtaskTime(
             ...sub,
             time: time?.trim() || undefined,
             due_date: due_date?.trim() || undefined,
+            start_date: start_date?.trim() || sub.start_date || undefined,
+            start_time: start_time?.trim() || sub.start_time || undefined,
           };
         }
         return sub;
@@ -545,4 +565,25 @@ export function deleteResearchMethod(
   return updateResearchData(projectId, stageId, subtaskId, {
     methods: nextMethods,
   });
+}
+
+export function linkProjectCategory(projectId: string, categoryId: string): Project | null {
+  const p = getProject(projectId);
+  if (!p) return null;
+  const current = p.category_ids || [];
+  if (!current.includes(categoryId)) {
+    return updateProject(projectId, { category_ids: [...current, categoryId] });
+  }
+  return p;
+}
+
+export function unlinkProjectCategory(projectId: string, categoryId: string): Project | null {
+  const p = getProject(projectId);
+  if (!p) return null;
+  const current = p.category_ids || [];
+  return updateProject(projectId, { category_ids: current.filter((id) => id !== categoryId) });
+}
+
+export function updateProjectCategories(projectId: string, categoryIds: string[]): Project | null {
+  return updateProject(projectId, { category_ids: categoryIds });
 }

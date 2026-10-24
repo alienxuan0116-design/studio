@@ -11,6 +11,7 @@ export interface Task {
   tag?: string;
   start?: string;
   due?: string;
+  start_date?: string;
   due_date?: string;
   priority?: 'low' | 'medium' | 'high' | string;
   is_priority?: boolean;
@@ -51,13 +52,12 @@ export interface ResearchData {
   methods: ResearchMethod[];
 }
 
-export type SubtaskDifficulty = 'low' | 'medium' | 'high' | 'extreme'; // 简单、中等、困难、极难
+export type SubtaskDifficulty = 'low' | 'medium' | 'high'; // Easy, Medium, Hard
 
 export const DIFFICULTY_LABELS: Record<SubtaskDifficulty, string> = {
-  low: '简单',
-  medium: '中等',
-  high: '困难',
-  extreme: '极难',
+  low: 'Easy',
+  medium: 'Medium',
+  high: 'Hard',
 };
 
 export interface PartSubtask {
@@ -65,10 +65,12 @@ export interface PartSubtask {
   title: string;
   type: 'regular' | 'research';
   done: boolean;
-  in_today_focus?: boolean; // 加入 Today's Focus
-  time?: string; // 选填时间，如 "14:30"
-  due_date?: string; // 选填日期，如 "2026-10-23"
-  difficulty: SubtaskDifficulty; // 难度必填：简单、中等、困难、极难
+  in_today_focus?: boolean; // In Today's Focus
+  time?: string; // Optional time, e.g. "14:30"
+  start_time?: string; // Optional start time, e.g. "14:30"
+  start_date?: string; // Optional start date, e.g. "2026-10-24"
+  due_date?: string; // Optional end/due date, e.g. "2026-10-27"
+  difficulty: SubtaskDifficulty; // Easy, Medium, Hard
   research?: ResearchData;
   createdAt: number;
 }
@@ -108,6 +110,7 @@ export interface Project {
   discoveries?: ProjectDiscovery[];
   cycleCount?: number; // Optional legacy field
   completedAt?: number;
+  category_ids?: string[]; // 关联的大分类 IDs
 }
 
 export const essentials: Task[] = [
@@ -119,6 +122,18 @@ export const essentials: Task[] = [
 ];
 
 export const focusTasks: Task[] = [
+  {
+    id: 'f-multiday-1',
+    label: 'Design System & Token Architecture',
+    done: false,
+    tag: 'Design',
+    start_date: '2026-10-24',
+    due_date: '2026-10-27',
+    due: '2026-10-27',
+    start: '2026-10-24',
+    priority: 'high',
+    is_priority: true,
+  },
   { id: 'f1', label: 'Finish design review', done: false, tag: 'Design', start: '09:00', due: '20 Oct, 20:00' },
   { id: 'f2', label: 'Write project brief', done: false, tag: 'Writing', start: '11:00', due: '20 Oct, 18:00' },
   { id: 'f3', label: 'Code auth flow', done: false, tag: 'Dev', start: '14:00', due: '20 Oct, 17:00' },
@@ -141,6 +156,83 @@ export const events: EventItem[] = [
 ];
 
 export const projects: Project[] = [
+  {
+    id: 'proj-audience-animation',
+    name: '观察观众的动画',
+    progress: 35,
+    accent: 'from-amber-400 to-orange-500',
+    vision: '细腻捕捉影厅内观众微表情与体态起伏的叙事动画短片。',
+    status: 'in_progress',
+    category_ids: ['cat-animation'],
+    stages: [
+      {
+        id: 'stage-anim-1',
+        name: 'Part 1 · 概念设定与角色动作捕捉',
+        status: 'completed',
+        subtasks: [
+          {
+            id: 'sub-anim-1',
+            title: '观众各年龄层坐姿速写与轮廓提炼',
+            type: 'regular',
+            difficulty: 'medium',
+            done: true,
+            createdAt: Date.now() - 86400000 * 3,
+          },
+        ],
+      },
+      {
+        id: 'stage-anim-2',
+        name: 'Part 2 · 运动规律探索与表情动态测试',
+        status: 'in_progress',
+        subtasks: [
+          {
+            id: 'sub-anim-2',
+            title: '极难加减速与缓动曲线调校',
+            type: 'regular',
+            difficulty: 'high',
+            done: false,
+            time: '14:30',
+            createdAt: Date.now() - 86400000,
+          },
+          {
+            id: 'sub-anim-3',
+            title: '调查暗场微光下面部肌肉运动规律',
+            type: 'research',
+            difficulty: 'medium',
+            done: false,
+            in_today_focus: true,
+            createdAt: Date.now() - 40000,
+            research: {
+              question: '微弱屏幕反光下，瞳孔与眉弓运动如何表现微小惊奇？',
+              investigationLog: '对比高对比度打光与环境漫反射，寻找真实的生理反应幅度。',
+              methods: [
+                {
+                  id: 'meth-anim-1',
+                  content: '阶梯式阴影逐帧提亮与缓出微颤',
+                  status: 'success',
+                  notes: '保留了暗部细节，缓动平滑自然',
+                  createdAt: Date.now() - 30000,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        id: 'stage-anim-3',
+        name: 'Part 3 · 镜头景深与成片渲染',
+        status: 'pending',
+        subtasks: [],
+      },
+    ],
+    discoveries: [
+      {
+        id: 'disc-anim-1',
+        note: '观众身体微倾与加减速缓动直接影响观众视线的共鸣程度',
+        createdAt: Date.now() - 86400000,
+      },
+    ],
+  },
   {
     id: 'p1',
     name: 'Studio App Redesign',

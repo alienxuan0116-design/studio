@@ -20,6 +20,9 @@ import TaskDetailPage from '@/pages/TaskDetailPage';
 import NewTaskPage from '@/pages/NewTaskPage';
 import ProjectDetailPage from '@/pages/ProjectDetailPage';
 import ResearchPage from '@/pages/ResearchPage';
+import BroadCategoriesSection from '@/components/BroadCategoriesSection';
+import CategoriesPage from '@/pages/CategoriesPage';
+import CategoryDetailPage from '@/pages/CategoryDetailPage';
 import {
   Scratchpad,
   SCRATCHPAD_CATEGORIES,
@@ -59,6 +62,7 @@ export default function App() {
   const [page, setPage] = useState('home');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [activeResearch, setActiveResearch] = useState<{
     projectId: string;
     partId: string;
@@ -367,9 +371,27 @@ export default function App() {
   const sortedOther = sortTasksByPriorityAndTime(other);
 
   // ---- Full pages ----
-  if (page === 'schedule')
+  if (page === 'schedule' || page === 'timeline')
     return (
       <SchedulePage
+        initialFocus="timeline"
+        onBack={back}
+        onOpenTask={openTask}
+        onOpenProject={(id) => {
+          setActiveProjectId(id);
+          setPage('project-detail');
+        }}
+        onOpenResearch={(projectId, partId, subtaskId) => {
+          setActiveProjectId(projectId);
+          setActiveResearch({ projectId, partId, subtaskId });
+          setPage('research');
+        }}
+      />
+    );
+  if (page === 'calendar')
+    return (
+      <SchedulePage
+        initialFocus="calendar"
         onBack={back}
         onOpenTask={openTask}
         onOpenProject={(id) => {
@@ -405,6 +427,10 @@ export default function App() {
           setActiveResearch({ projectId: activeProjectId, partId, subtaskId });
           setPage('research');
         }}
+        onOpenCategory={(catId) => {
+          setActiveCategoryId(catId);
+          setPage('category-detail');
+        }}
       />
     );
   if (page === 'research' && activeResearch)
@@ -415,6 +441,29 @@ export default function App() {
         subtaskId={activeResearch.subtaskId}
         onBack={() => {
           setProjectList(loadProjects());
+          setPage('project-detail');
+        }}
+      />
+    );
+  if (page === 'categories' || page === 'learning')
+    return (
+      <CategoriesPage
+        onBack={back}
+        onOpenCategory={(id) => {
+          setActiveCategoryId(id);
+          setPage('category-detail');
+        }}
+      />
+    );
+  if (page === 'category-detail' && activeCategoryId)
+    return (
+      <CategoryDetailPage
+        categoryId={activeCategoryId}
+        onBack={() => {
+          setPage('categories');
+        }}
+        onOpenProject={(id) => {
+          setActiveProjectId(id);
           setPage('project-detail');
         }}
       />
@@ -460,7 +509,6 @@ export default function App() {
         onRefreshTasks={loadAll}
       />
     );
-  if (page === 'learning') return <LearningPage onBack={back} />;
   if (page === 'themes') return <ThemesPage onBack={back} />;
   if (page === 'task-detail' && activeTaskId)
     return (
@@ -544,12 +592,26 @@ export default function App() {
             </CollapsibleSection>
 
 
-            {/* 5. 项目进度 (Project Progress) */}
+            {/* 4. 项目进度 (Project Progress) */}
             <div id="projects">
               <ProjectProgress projects={projectList} onNavigate={navigate} />
             </div>
 
-            {/* 6. Today's Focus: 包含独立焦点任务与加入 Today's Focus 的制作/研究子任务 */}
+            {/* 4.5. 大分类与技能积累系统 (Broad Categories) */}
+            <div id="disciplines">
+              <BroadCategoriesSection
+                onNavigate={navigate}
+                onOpenCategory={(catId) => {
+                  setActiveCategoryId(catId);
+                  setPage('category-detail');
+                }}
+                onOpenNewCategory={() => {
+                  setPage('categories');
+                }}
+              />
+            </div>
+
+            {/* 5. Today's Focus: 包含独立焦点任务与加入 Today's Focus 的制作/研究子任务 */}
             <div id="focus">
               <CollapsibleSection
                 kicker="Priority"

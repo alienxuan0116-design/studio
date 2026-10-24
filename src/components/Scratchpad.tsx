@@ -19,19 +19,19 @@ export interface ScratchpadCategoryDef {
 }
 
 export const SCRATCHPAD_CATEGORIES: ScratchpadCategoryDef[] = [
-  { id: 'essential', label: 'Essential / 必备', category: 'essential', task_type: 'essential' },
-  { id: 'single', label: '单次任务', category: 'focus', task_type: 'single' },
-  { id: 'project', label: '短期项目', category: 'focus', task_type: 'project' },
-  { id: 'learning', label: '长期学习', category: 'focus', task_type: 'learning' },
+  { id: 'essential', label: 'Essential', category: 'essential', task_type: 'essential' },
+  { id: 'single', label: 'Single Task', category: 'focus', task_type: 'single' },
+  { id: 'project', label: 'Short-term Project', category: 'focus', task_type: 'project' },
+  { id: 'learning', label: 'Long-term Learning', category: 'focus', task_type: 'learning' },
 ];
 
 export function getCategoryLabel(target?: string): string {
   if (!target) return 'Unorganized';
-  if (target === 'essential') return 'Essential / 必备';
-  if (target === 'single') return '单次任务';
-  if (target === 'project' || target === 'focus') return '短期项目';
-  if (target === 'learning') return '长期学习';
-  if (target === 'other') return 'Other / 其他';
+  if (target === 'essential') return 'Essential';
+  if (target === 'single') return 'Single Task';
+  if (target === 'project' || target === 'focus') return 'Short-term Project';
+  if (target === 'learning') return 'Long-term Learning';
+  if (target === 'other') return 'Other';
   return target;
 }
 
@@ -209,7 +209,7 @@ export function Scratchpad({
                               <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-0.5 gap-1 shrink-0">
                                 {(['low', 'medium', 'high'] as const).map((level) => {
                                   const isSel = organizeDifficulty === level;
-                                  const label = level === 'low' ? 'Low' : level === 'medium' ? 'Mid' : 'High';
+                                  const label = level === 'low' ? 'Easy' : level === 'medium' ? 'Medium' : 'Hard';
                                   return (
                                     <button
                                       key={level}

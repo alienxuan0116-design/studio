@@ -12,6 +12,7 @@ export interface TaskRow {
   project_id: string | null;
   start_time: string | null;
   due_time: string | null;
+  start_date?: string | null;
   due_date?: string | null;
   priority: string | null; // 'low' | 'medium' | 'high'
   is_priority?: boolean;   // 重点任务标记
@@ -80,8 +81,10 @@ function getInitialTasks(): TaskRow[] {
       project_id: null,
       start_time: t.start ?? null,
       due_time: t.due ?? null,
+      start_date: t.start_date ?? null,
+      due_date: t.due_date ?? null,
       priority: (t.priority as string) ?? 'high',
-      is_priority: t.id === 'f1' ? true : (t.is_priority ?? false), // sample priority card
+      is_priority: t.id === 'f1' || t.id === 'f-multiday-1' ? true : (t.is_priority ?? false),
       task_type: 'project',
       sort_order: order++,
       created_at: Date.now() - 3600000 * 8,
@@ -99,6 +102,8 @@ function getInitialTasks(): TaskRow[] {
       project_id: null,
       start_time: t.start ?? null,
       due_time: t.due ?? null,
+      start_date: t.start_date ?? null,
+      due_date: t.due_date ?? null,
       priority: (t.priority as string) ?? 'low',
       is_priority: t.is_priority ?? false,
       task_type: 'single',
@@ -127,10 +132,39 @@ export function loadLocalTasks(): TaskRow[] {
       return initial;
     }
     const parsed: TaskRow[] = JSON.parse(raw);
-    return parsed.map((t) => ({
+    const hasMultiday = parsed.some((t) => t.id === 'f-multiday-1');
+    let working = parsed;
+    if (!hasMultiday) {
+      const multi = focusTasks.find((t) => t.id === 'f-multiday-1');
+      if (multi) {
+        working = [
+          {
+            id: multi.id,
+            label: multi.label,
+            description: null,
+            done: multi.done,
+            category: 'focus',
+            tag: multi.tag ?? null,
+            project_id: null,
+            start_time: multi.start ?? null,
+            due_time: multi.due ?? null,
+            start_date: multi.start_date ?? null,
+            due_date: multi.due_date ?? null,
+            priority: (multi.priority as string) ?? 'high',
+            is_priority: multi.is_priority ?? true,
+            task_type: 'project',
+            sort_order: -1,
+            created_at: Date.now() - 3600000 * 5,
+          },
+          ...parsed,
+        ];
+        saveLocalTasks(working);
+      }
+    }
+    return working.map((t) => ({
       ...t,
       is_priority: typeof t.is_priority === 'boolean' ? t.is_priority : false,
-      priority: t.priority || 'medium',
+      priority: t.priority === 'extreme' ? 'high' : (t.priority || 'medium'),
     }));
   } catch {
     return getInitialTasks();
@@ -157,8 +191,9 @@ export function rowToTask(row: TaskRow): Task {
     tag: row.tag ?? undefined,
     start: row.start_time ?? undefined,
     due: row.due_time ?? undefined,
+    start_date: row.start_date ?? undefined,
     due_date: row.due_date ?? undefined,
-    priority: (row.priority as 'low' | 'medium' | 'high') ?? 'medium',
+    priority: ((row.priority === 'extreme' ? 'high' : row.priority) as 'low' | 'medium' | 'high') ?? 'medium',
     is_priority: row.is_priority ?? false,
     category: row.category,
     created_at: row.created_at,
@@ -304,6 +339,7 @@ export async function createTask(task: Partial<TaskRow>): Promise<TaskRow | null
     project_id: task.project_id ?? null,
     start_time: task.start_time ?? null,
     due_time: task.due_time ?? null,
+    start_date: task.start_date ?? null,
     due_date: task.due_date ?? null,
     priority: task.priority ?? 'medium',
     is_priority: task.is_priority ?? false,
@@ -556,8 +592,10 @@ export interface UnifiedScheduleTask {
   title: string;
   done: boolean;
   is_priority?: boolean;
-  priority?: string; // difficulty: 'low' | 'medium' | 'high' | 'extreme'
+  priority?: string; // difficulty: 'low' | 'medium' | 'high'
+  start_date?: string; // YYYY-MM-DD
   due_date?: string; // YYYY-MM-DD
+  start_time?: string; // HH:mm
   due_time?: string; // HH:mm
   sourceType: 'task' | 'subtask_regular' | 'subtask_research';
   category?: string;
@@ -580,8 +618,10 @@ export function getAllScheduleTasks(): UnifiedScheduleTask[] {
       title: t.label,
       done: Boolean(t.done),
       is_priority: Boolean(t.is_priority),
-      priority: t.priority || 'medium',
-      due_date: t.due_date?.trim() || undefined,
+      priority: t.priority === 'extreme' ? 'high' : (t.priority || 'medium'),
+      start_date: (t.start_date || t.due_date)?.trim() || undefined,
+      due_date: (t.due_date || t.start_date)?.trim() || undefined,
+      start_time: t.start_time?.trim() || undefined,
       due_time: (t.due_time || t.start_time)?.trim() || undefined,
       sourceType: 'task',
       category: t.category,
@@ -601,8 +641,9 @@ export function getAllScheduleTasks(): UnifiedScheduleTask[] {
           title: sub.title,
           done: Boolean(sub.done),
           is_priority: Boolean(sub.in_today_focus),
-          priority: sub.difficulty || 'medium',
-          due_date: sub.due_date?.trim() || undefined,
+          priority: (sub.difficulty as string) === 'extreme' ? 'high' : (sub.difficulty || 'medium'),
+          start_date: (sub.start_date || sub.due_date)?.trim() || undefined,
+          due_date: (sub.due_date || sub.start_date)?.trim() || undefined,
           due_time: sub.time?.trim() || undefined,
           sourceType: sub.type === 'research' ? 'subtask_research' : 'subtask_regular',
           category: 'project',
@@ -622,22 +663,37 @@ export function getAllScheduleTasks(): UnifiedScheduleTask[] {
 export async function updateUnifiedTaskSchedule(
   id: string,
   due_date?: string | null,
-  due_time?: string | null
+  due_time?: string | null,
+  start_date?: string | null,
+  start_time?: string | null
 ): Promise<void> {
-  const dateVal = due_date?.trim() || undefined;
-  const timeVal = due_time?.trim() || undefined;
+  const dateVal = due_date !== undefined ? (due_date?.trim() || null) : undefined;
+  const timeVal = due_time !== undefined ? (due_time?.trim() || null) : undefined;
+  const startDateVal = start_date !== undefined ? (start_date?.trim() || null) : undefined;
+  const startTimeVal = start_time !== undefined ? (start_time?.trim() || null) : undefined;
 
   if (id.startsWith('subtask::')) {
     const parts = id.split('::');
     const projId = parts[1];
     const stageId = parts[2];
     const subId = parts[3];
-    updateSubtaskTime(projId, stageId, subId, timeVal, dateVal);
+    updateSubtaskTime(
+      projId,
+      stageId,
+      subId,
+      timeVal !== undefined ? (timeVal || undefined) : undefined,
+      dateVal !== undefined ? (dateVal || undefined) : undefined,
+      startDateVal !== undefined ? (startDateVal || undefined) : undefined,
+      startTimeVal !== undefined ? (startTimeVal || undefined) : undefined
+    );
   } else {
-    await updateTask(id, {
-      due_date: dateVal || null,
-      due_time: timeVal || null,
-    });
+    const updates: Partial<TaskRow> = {};
+    if (due_date !== undefined) updates.due_date = dateVal;
+    if (due_time !== undefined) updates.due_time = timeVal;
+    if (start_date !== undefined) updates.start_date = startDateVal;
+    if (start_time !== undefined) updates.start_time = startTimeVal;
+
+    await updateTask(id, updates);
   }
 
   if (typeof window !== 'undefined') {

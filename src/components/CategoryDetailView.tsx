@@ -32,7 +32,7 @@ export const CategoryDetailView: React.FC<CategoryDetailViewProps> = ({
           <button
             type="button"
             onClick={onBack}
-            aria-label="返回首页"
+            aria-label="Back"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -48,7 +48,7 @@ export const CategoryDetailView: React.FC<CategoryDetailViewProps> = ({
         <button
           type="button"
           onClick={() => onAddTask(category.id)}
-          aria-label="添加任务"
+          aria-label="Add task"
           className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
         >
           <Plus className="w-5 h-5" />
@@ -58,7 +58,7 @@ export const CategoryDetailView: React.FC<CategoryDetailViewProps> = ({
       {/* Task List */}
       {sortedTasks.length === 0 ? (
         <div className="text-center py-16 text-zinc-500 text-xs">
-          暂无任务
+          No tasks
         </div>
       ) : (
         <div className="space-y-2.5">

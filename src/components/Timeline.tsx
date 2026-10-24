@@ -3,15 +3,20 @@ import { events as defaultEvents } from '@/data';
 import NavDot from './NavDot';
 import { getAllScheduleTasks, type UnifiedScheduleTask } from '@/lib/tasks';
 import { getTodayDateString } from './DateTimePicker';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, GraduationCap, MapPin } from 'lucide-react';
+import {
+  getClassesForDate,
+  loadTimetableClasses,
+  type TimetableClass,
+} from '@/lib/timetable';
 import {
   getStoredTimezone,
   formatDateTimeInTimezone,
 } from '@/lib/timezone';
 
-const START_HOUR = 8;
-const END_HOUR = 18;
-const HOUR_PX = 120;
+const START_HOUR = 0;
+const END_HOUR = 24;
+const HOUR_PX = 96;
 const TOTAL_PX = (END_HOUR - START_HOUR) * HOUR_PX;
 const MIN_EVENT_WIDTH_PX = 92;
 const TRACK_HEIGHT_PX = 46;
@@ -21,8 +26,9 @@ const TOP_OFFSET_PX = 36;
 function formatHour(h: number) {
   const hh = Math.floor(h);
   const m = Math.round((h - hh) * 60);
-  const ampm = hh >= 12 ? 'PM' : 'AM';
-  const h12 = hh % 12 || 12;
+  if (hh === 24 && m === 0) return '24:00';
+  const ampm = hh >= 12 && hh < 24 ? 'PM' : 'AM';
+  const h12 = hh === 0 || hh === 24 ? 12 : hh > 12 ? hh - 12 : hh;
   return m === 0 ? `${h12} ${ampm}` : `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 }
 
@@ -45,6 +51,9 @@ interface TimelineDisplayEvent {
   color: string;
   isPriority?: boolean;
   category?: string;
+  isClass?: boolean;
+  location?: string;
+  timeRange?: string;
 }
 
 interface PositionedEvent extends TimelineDisplayEvent {
@@ -61,11 +70,20 @@ interface Props {
 export default function Timeline({ onNavigate }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scheduleTasks, setScheduleTasks] = useState<UnifiedScheduleTask[]>(() => getAllScheduleTasks());
+  const [timetableClasses, setTimetableClasses] = useState<TimetableClass[]>(() => loadTimetableClasses());
   const [timezone, setTimezone] = useState(() => getStoredTimezone());
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
   useEffect(() => {
     setScheduleTasks(getAllScheduleTasks());
+    setTimetableClasses(loadTimetableClasses());
+    // Auto-scroll to near current hour so user is not stuck at 00:00 midnight
+    if (scrollRef.current) {
+      const now = new Date();
+      const currentH = now.getHours() + now.getMinutes() / 60;
+      const targetScroll = Math.max(0, (currentH - 1.5) * HOUR_PX);
+      scrollRef.current.scrollLeft = targetScroll;
+    }
   }, []);
 
   useEffect(() => {
@@ -78,35 +96,75 @@ export default function Timeline({ onNavigate }: Props) {
     const handleTasksChanged = () => {
       setScheduleTasks(getAllScheduleTasks());
     };
+    const handleTimetableChanged = () => {
+      setTimetableClasses(loadTimetableClasses());
+    };
+
     window.addEventListener('studio_os_timezone_changed', handleTzChange);
     window.addEventListener('studio_os_tasks_changed', handleTasksChanged);
+    window.addEventListener('studio_os_timetable_changed', handleTimetableChanged);
     return () => {
       window.removeEventListener('studio_os_timezone_changed', handleTzChange);
       window.removeEventListener('studio_os_tasks_changed', handleTasksChanged);
+      window.removeEventListener('studio_os_timetable_changed', handleTimetableChanged);
     };
   }, []);
 
   const todayStr = useMemo(() => getTodayDateString(), []);
+
+  // Recurring timetable classes for today's weekday
+  const todayClassEvents = useMemo<TimelineDisplayEvent[]>(() => {
+    const list: TimelineDisplayEvent[] = [];
+    const classesForToday = getClassesForDate(todayStr);
+
+    classesForToday.forEach((cls) => {
+      const start = parseHourFromTime(cls.startTime);
+      const end = parseHourFromTime(cls.endTime);
+      if (start !== null && end !== null) {
+        list.push({
+          id: `class-${cls.id}`,
+          title: cls.courseName,
+          startHour: start,
+          endHour: Math.max(start + 0.4, end),
+          color: 'from-emerald-700/85 via-teal-700/85 to-emerald-800/90',
+          isPriority: false,
+          category: 'class',
+          isClass: true,
+          location: cls.location,
+          timeRange: `${cls.startTime} - ${cls.endTime}`,
+        });
+      }
+    });
+
+    return list;
+  }, [todayStr, timetableClasses]);
 
   const todayTaskEvents = useMemo<TimelineDisplayEvent[]>(() => {
     const list: TimelineDisplayEvent[] = [];
 
     // Unified tasks: ordinary tasks, regular subtasks, research subtasks
     scheduleTasks.forEach((t) => {
-      // Rule: Must not be done, must have due_time, and MUST have due_date === todayStr!
-      // "清除日期或时间后，相关视图正确更新；无日期任务不得自动显示在今天。有完整日期和时间：同时显示在日历与时间轴。"
-      if (t.done || !t.due_time) return;
-      if (t.due_date !== todayStr) return;
+      if (t.done || (!t.due_time && !t.start_time)) return;
 
-      const hour = parseHourFromTime(t.due_time);
-      if (hour !== null && hour >= START_HOUR && hour < END_HOUR) {
+      const startDate = t.start_date || t.due_date;
+      const dueDate = t.due_date || t.start_date;
+      if (!startDate || !dueDate) return;
+      if (todayStr < startDate || todayStr > dueDate) return;
+
+      const start = parseHourFromTime(t.start_time || t.due_time);
+      if (start !== null && start >= START_HOUR && start < END_HOUR) {
+        const end =
+          t.start_time && t.due_time && parseHourFromTime(t.due_time)
+            ? Math.max(start + 0.4, parseHourFromTime(t.due_time)!)
+            : Math.min(END_HOUR, start + 1);
+
         let color = 'from-sky-600/80 to-blue-600/80';
         if (t.sourceType === 'subtask_research') {
           color = 'from-indigo-600/85 to-purple-600/85';
         } else if (t.is_priority) {
           color = 'from-purple-600/85 to-fuchsia-600/85';
         } else if (t.category === 'essential') {
-          color = 'from-emerald-600/80 to-teal-600/80';
+          color = 'from-teal-600/80 to-emerald-600/80';
         }
 
         const displayTitle = t.part_name ? `${t.part_name} · ${t.title}` : t.title;
@@ -114,11 +172,12 @@ export default function Timeline({ onNavigate }: Props) {
         list.push({
           id: `sched-ev-${t.id}`,
           title: displayTitle,
-          startHour: hour,
-          endHour: Math.min(END_HOUR, hour + 1),
+          startHour: start,
+          endHour: end,
           color,
           isPriority: Boolean(t.is_priority),
           category: t.category,
+          timeRange: t.start_time && t.due_time ? `${t.start_time} - ${t.due_time}` : t.due_time || undefined,
         });
       }
     });
@@ -127,11 +186,12 @@ export default function Timeline({ onNavigate }: Props) {
   }, [scheduleTasks, todayStr]);
 
   const allDisplayEvents = useMemo<TimelineDisplayEvent[]>(() => {
-    return [
-      ...defaultEvents.map((e) => ({ ...e, isPriority: false })),
-      ...todayTaskEvents,
-    ];
-  }, [todayTaskEvents]);
+    const realEvents = [...todayClassEvents, ...todayTaskEvents];
+    if (realEvents.length > 0) {
+      return realEvents;
+    }
+    return defaultEvents.map((e) => ({ ...e, isPriority: false }));
+  }, [todayClassEvents, todayTaskEvents]);
 
   // Collision-free track allocation algorithm:
   // Staggers concurrent items across vertical tracks (lanes) so they never overlap.
@@ -199,17 +259,26 @@ export default function Timeline({ onNavigate }: Props) {
   const containerHeight = Math.max(140, TOP_OFFSET_PX + totalTracks * (TRACK_HEIGHT_PX + TRACK_GAP_PX) + 10);
 
   return (
-    <div className="glass glass-glow rounded-3xl p-4 sm:p-6">
+    <div
+      onClick={(e) => {
+        // If clicking on an event card, let its own handler execute
+        if ((e.target as HTMLElement).closest('[data-timeline-event="true"]')) return;
+        onNavigate('timeline');
+      }}
+      className="glass glass-glow rounded-3xl p-4 sm:p-6 cursor-pointer group/timeline hover:border-white/20 transition-all"
+    >
       <div className="flex items-start justify-between mb-4">
         <div>
           <h2 className="text-xs sm:text-sm tracking-[0.2em] uppercase text-white/50">Schedule</h2>
-          <p className="text-base sm:text-lg font-light text-white/90 mt-0.5">Today's Timeline</p>
+          <p className="text-base sm:text-lg font-light text-white/90 mt-0.5 group-hover/timeline:text-white transition-colors">
+            Today's Timeline
+          </p>
         </div>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-[10px] sm:text-[11px] tracking-wide text-white/40 px-2.5 sm:px-3 py-1 rounded-full border border-white/10">
             {allDisplayEvents.length} events
           </span>
-          <NavDot label="Open Schedule page" onClick={() => onNavigate('schedule')} />
+          <NavDot label="Open Schedule page" onClick={() => onNavigate('timeline')} />
         </div>
       </div>
 
@@ -237,7 +306,15 @@ export default function Timeline({ onNavigate }: Props) {
             return (
               <div
                 key={ev.id}
-                onClick={() => setSelectedEventId(isSelected ? null : ev.id)}
+                data-timeline-event="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedEventId(isSelected ? null : ev.id);
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate('timeline');
+                }}
                 title={`${ev.title} (${formatHour(ev.startHour)} - ${formatHour(ev.endHour)})`}
                 className={`absolute rounded-xl bg-gradient-to-br ${ev.color} border border-white/15 backdrop-blur-md flex flex-col justify-between py-1.5 px-2.5 shadow-lg overflow-hidden transition-all duration-200 cursor-pointer select-none ${
                   isSelected ? 'ring-2 ring-white/60 scale-[1.02] z-20 shadow-purple-500/20' : 'hover:scale-[1.01] hover:border-white/30 z-10'
@@ -249,31 +326,31 @@ export default function Timeline({ onNavigate }: Props) {
                   height: TRACK_HEIGHT_PX,
                 }}
               >
-                {/* Event Title with wrap & Sparkles icon if priority */}
+                {/* Event Title with wrap & Sparkles / GraduationCap icon */}
                 <div className="flex items-start gap-1 min-w-0">
                   {Boolean(ev.isPriority) && (
                     <Sparkles size={11} className="text-amber-300 shrink-0 fill-amber-300 mt-0.5" />
+                  )}
+                  {Boolean(ev.isClass) && (
+                    <GraduationCap size={11} className="text-emerald-300 shrink-0 mt-0.5" />
                   )}
                   <span className="text-[11px] font-medium text-white/95 leading-tight line-clamp-2 break-words text-left">
                     {ev.title}
                   </span>
                 </div>
 
-                {/* Event Time */}
-                <span className="text-[9px] text-white/65 whitespace-nowrap leading-none font-mono tracking-tight mt-0.5">
-                  {formatHour(ev.startHour)}
-                </span>
+                {/* Event Time and Badge */}
+                <div className="flex items-center justify-between text-[9px] text-white/70 font-mono tracking-tight mt-0.5">
+                  <span>{ev.timeRange || formatHour(ev.startHour)}</span>
+                  {Boolean(ev.isClass) && (
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-950/70 px-1 py-0.2 rounded border border-emerald-500/30">
+                      Class
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
-
-          {/* Current time vertical indicator needle */}
-          {nowVisible && (
-            <div className="absolute top-0 bottom-0 z-30 pointer-events-none" style={{ left: nowLeft }}>
-              <div className="w-px h-full bg-gradient-to-b from-rose-400/90 to-rose-500/30" />
-              <div className="absolute top-0 -left-1 w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.8)]" />
-            </div>
-          )}
         </div>
       </div>
     </div>

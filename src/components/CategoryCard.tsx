@@ -41,8 +41,8 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
           <button
             type="button"
             onClick={() => onAddTask(category.id)}
-            aria-label="添加任务"
-            title="添加任务"
+            aria-label="Add task"
+            title="Add task"
             className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -50,8 +50,8 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
           <button
             type="button"
             onClick={() => onOpenCategory(category.id)}
-            aria-label="打开分类详情"
-            title="分类详情"
+            aria-label="Category details"
+            title="Category details"
             className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
           >
             <Circle className="w-4 h-4" />
@@ -63,7 +63,7 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
       <div className="space-y-2 flex-1">
         {sortedTasks.length === 0 ? (
           <div className="text-center py-8 text-zinc-600 text-xs">
-            暂无任务
+            No tasks
           </div>
         ) : (
           sortedTasks.map((task) => (

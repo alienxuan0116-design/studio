@@ -97,11 +97,50 @@ export default function TaskDetailPage({
     onUpdated?.();
   };
 
-  const handleTimeChange = async (newTime: string) => {
+  const handleStartDateChange = async (startDate: string) => {
     if (!task) return;
-    const updated = { ...task, due_time: newTime.trim() ? newTime : null };
+    const startVal = startDate.trim() ? startDate : null;
+    const updated = { ...task, start_date: startVal };
     setTask(updated);
-    await updateTask(task.id, { due_time: newTime.trim() ? newTime : null });
+    await updateTask(task.id, { start_date: startVal });
+    onUpdated?.();
+  };
+
+  const handleDueDateChange = async (dueDate: string) => {
+    if (!task) return;
+    const dueVal = dueDate.trim() ? dueDate : null;
+    const updated = { ...task, due_date: dueVal };
+    setTask(updated);
+    await updateTask(task.id, { due_date: dueVal });
+    onUpdated?.();
+  };
+
+  const handleStartTimeChange = async (newStartTime: string) => {
+    if (!task) return;
+    const val = newStartTime.trim() ? newStartTime : null;
+    const updated = { ...task, start_time: val };
+    setTask(updated);
+    await updateTask(task.id, { start_time: val });
+    onUpdated?.();
+  };
+
+  const handleDueTimeChange = async (newDueTime: string) => {
+    if (!task) return;
+    const val = newDueTime.trim() ? newDueTime : null;
+    const updated = { ...task, due_time: val };
+    setTask(updated);
+    await updateTask(task.id, { due_time: val });
+    onUpdated?.();
+  };
+  const handleTimeChange = handleDueTimeChange;
+
+  const handleDateRangeChange = async (startDate: string, dueDate: string) => {
+    if (!task) return;
+    const startVal = startDate.trim() ? startDate : null;
+    const dueVal = dueDate.trim() ? dueDate : null;
+    const updated = { ...task, start_date: startVal, due_date: dueVal };
+    setTask(updated);
+    await updateTask(task.id, { start_date: startVal, due_date: dueVal });
     onUpdated?.();
   };
 
@@ -290,28 +329,37 @@ export default function TaskDetailPage({
               </h2>
 
               <div className="flex items-center justify-between pt-4 border-t border-white/10 text-xs">
-                {/* Time & Date */}
+                {/* Time & Date Display */}
                 <div className="flex items-center gap-1.5 font-mono text-white/60">
-                  <Clock size={14} className="text-white/40" />
-                  <span>{formatMonthDayTime(task.due_date, task.due_time || task.start_time) || 'No time set'}</span>
+                  <Clock size={14} className="text-white/40 shrink-0" />
+                  <span>
+                    {!task.start_date && !task.due_date && !task.due_time && !task.start_time
+                      ? 'No date or time set'
+                      : task.start_date && task.due_date && task.start_date !== task.due_date
+                      ? `${task.start_date} – ${task.due_date}${
+                          task.due_time
+                            ? ` · ${task.start_time ? `${task.start_time} - ` : ''}${task.due_time}`
+                            : ' · All Day'
+                        }`
+                      : `${task.due_date || task.start_date}${
+                          task.due_time
+                            ? ` · ${task.start_time ? `${task.start_time} - ` : ''}${task.due_time}`
+                            : ' · All Day'
+                        }`}
+                  </span>
                 </div>
 
                 {/* Difficulty */}
                 <div className="flex items-center gap-2">
                   <span className="text-white/50 text-[11px]">
-                    {task.priority === 'high' ? 'High' : task.priority === 'low' ? 'Low' : 'Mid'}
+                    {task.priority === 'high' ? 'Hard' : task.priority === 'low' ? 'Easy' : 'Medium'}
                   </span>
                   <DifficultyDots difficulty={task.priority ?? 'medium'} />
                 </div>
               </div>
             </div>
           ) : (
-            /* Edit Mode:
-               - Header row: Editing Task title + Done button + Priority toggle
-               - Task name: w-full 46px height, rounded-2xl
-               - DateTimePicker: w-full 46px height, rounded-2xl, identical margins and alignment
-               - Auto-saves on change, no finish button needed.
-            */
+            /* Edit Mode */
             <div className="space-y-5">
               {/* Header row in edit mode */}
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -343,7 +391,7 @@ export default function TaskDetailPage({
                 </div>
               </div>
 
-              {/* Task name: full width with identical left/right margins to DateTimePicker */}
+              {/* Task name: full width */}
               <div className="w-full">
                 <input
                   type="text"
@@ -354,22 +402,120 @@ export default function TaskDetailPage({
                 />
               </div>
 
-              {/* Month & Day + Time Point */}
-              <DateTimePicker
-                date={task.due_date || ''}
-                time={task.due_time || ''}
-                onChange={(d, t) => handleDateTimeChange(d, t)}
-              />
+              {/* Start Date & End Date */}
+              <div className="space-y-3 pt-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-mono uppercase text-white/45">
+                        Start Date
+                      </label>
+                      {task.start_date && (
+                        <button
+                          type="button"
+                          onClick={() => handleStartDateChange('')}
+                          className="text-[9px] font-mono text-white/30 hover:text-rose-400"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="date"
+                      value={task.start_date || ''}
+                      onChange={(e) => handleStartDateChange(e.target.value)}
+                      className="studio-datetime-input text-xs"
+                      aria-label="Start Date"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-mono uppercase text-white/45">
+                        End / Due Date
+                      </label>
+                      {task.due_date && (
+                        <button
+                          type="button"
+                          onClick={() => handleDueDateChange('')}
+                          className="text-[9px] font-mono text-white/30 hover:text-rose-400"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="date"
+                      value={task.due_date || ''}
+                      onChange={(e) => handleDueDateChange(e.target.value)}
+                      className="studio-datetime-input text-xs"
+                      aria-label="End Date"
+                    />
+                  </div>
+                </div>
+
+                {/* Specific Time or All-Day */}
+                <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-white/50">
+                      Scheduled Time
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (task.due_time) {
+                          handleTimeChange('');
+                        } else {
+                          handleTimeChange('09:00');
+                        }
+                      }}
+                      className="text-[10px] font-mono text-purple-300 hover:text-purple-100 transition-colors"
+                    >
+                      {task.due_time ? 'Switch to All-Day' : '+ Set Specific Time'}
+                    </button>
+                  </div>
+
+                  {task.due_time ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-mono text-white/40 block mb-1">
+                          Start Time
+                        </label>
+                        <input
+                          type="time"
+                          value={task.start_time || ''}
+                          onChange={(e) => handleStartTimeChange(e.target.value)}
+                          className="studio-datetime-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-mono text-white/40 block mb-1">
+                          End Time
+                        </label>
+                        <input
+                          type="time"
+                          value={task.due_time || ''}
+                          onChange={(e) => handleTimeChange(e.target.value)}
+                          className="studio-datetime-input text-xs"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] font-mono text-white/40">
+                      All-Day / Date-only task (no specific hour allocated).
+                    </p>
+                  )}
+                </div>
+              </div>
 
               {/* 2. Difficulty selection */}
               <div className="flex items-center justify-between gap-2 pt-1">
                 <span className="text-[11px] font-mono uppercase tracking-wider text-white/45">
-                  2. Difficulty
+                  Difficulty
                 </span>
                 <div className="flex items-center bg-white/5 border border-white/10 rounded-2xl p-1 gap-1">
                   {(['low', 'medium', 'high'] as const).map((level) => {
                     const isSelected = (task.priority || 'medium') === level;
-                    const label = level === 'low' ? 'Low' : level === 'medium' ? 'Mid' : 'High';
+                    const label = level === 'low' ? 'Easy' : level === 'medium' ? 'Medium' : 'Hard';
                     return (
                       <button
                         key={level}

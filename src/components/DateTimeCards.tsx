@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Calendar } from 'lucide-react';
 import {
   getStoredTimezone,
   formatDateTimeInTimezone,
@@ -41,12 +42,28 @@ export default function DateTimeCards({ onNavigate }: Props) {
     <>
       <div className="relative">
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
-          {/* Date card — watch-face composition with top-right circle removed */}
-          <div className="glass glass-glow glass-hover rounded-3xl p-3.5 sm:p-6 aspect-square flex flex-col justify-between overflow-hidden">
+          {/* Date card — watch-face composition with main Calendar icon */}
+          <div
+            onClick={() => onNavigate?.('calendar')}
+            title="Open Calendar"
+            className="glass glass-glow glass-hover rounded-3xl p-3.5 sm:p-6 aspect-square flex flex-col justify-between overflow-hidden cursor-pointer group/date hover:border-purple-500/40 transition-all select-none"
+          >
             <div className="flex items-center justify-between min-h-[20px]">
-              <span className="text-[9px] sm:text-[11px] tracking-[0.25em] sm:tracking-[0.3em] uppercase text-white/50">
+              <span className="text-[9px] sm:text-[11px] tracking-[0.25em] sm:tracking-[0.3em] uppercase text-white/50 group-hover/date:text-purple-300 transition-colors">
                 {data.dayName}
               </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate?.('calendar');
+                }}
+                aria-label="Open Calendar"
+                title="Open Calendar"
+                className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <Calendar size={14} className="text-purple-300/80 group-hover/date:text-purple-200 transition-colors" />
+              </button>
             </div>
             <div className="flex-1 flex flex-col items-center justify-center gap-0.5 sm:gap-1">
               <span className="font-extralight leading-none tracking-tight text-[2.75rem] xs:text-[3.25rem] sm:text-[5rem] lg:text-[6rem] bg-gradient-to-b from-white to-white/50 bg-clip-text text-transparent tabular-nums">

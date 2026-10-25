@@ -19,6 +19,8 @@ import {
   type BroadCategory,
   MASTERY_LABELS,
 } from '@/lib/categories';
+import { loadScratchNotes, ScratchNote } from '@/lib/tasks';
+import { Bookmark } from 'lucide-react';
 
 interface Props {
   onBack: () => void;
@@ -36,6 +38,7 @@ const ACCENT_OPTIONS = [
 
 export default function CategoriesPage({ onBack, onOpenCategory }: Props) {
   const [categories, setCategories] = useState<BroadCategory[]>(() => loadCategories());
+  const [connectedNotes, setConnectedNotes] = useState<ScratchNote[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -47,9 +50,16 @@ export default function CategoriesPage({ onBack, onOpenCategory }: Props) {
   const [editDesc, setEditDesc] = useState('');
   const [editAccent, setEditAccent] = useState('');
 
-  const refresh = () => setCategories(loadCategories());
+  const refresh = () => {
+    setCategories(loadCategories());
+    const notes = loadScratchNotes().filter(
+      (n) => n.is_organized && (n.target_category === 'major_category_learning' || n.target_category === 'learning')
+    );
+    setConnectedNotes(notes);
+  };
 
   useEffect(() => {
+    refresh();
     window.addEventListener('studio_os_categories_changed', refresh);
     return () => window.removeEventListener('studio_os_categories_changed', refresh);
   }, []);
@@ -386,6 +396,29 @@ export default function CategoriesPage({ onBack, onOpenCategory }: Props) {
             );
           })}
         </div>
+
+        {/* Connected Scratchpad Notes for Major Category / Learning */}
+        {connectedNotes.length > 0 && (
+          <div className="pt-5 border-t border-white/10 space-y-2.5">
+            <div className="flex items-center gap-1.5 text-xs font-mono text-white/50 px-1">
+              <Bookmark size={13} className="text-amber-400" />
+              <span>Connected Notes: Major Category / Learning ({connectedNotes.length})</span>
+            </div>
+            <div className="space-y-2">
+              {connectedNotes.map((note) => (
+                <div
+                  key={note.id}
+                  className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/20 text-xs text-amber-100/90 flex items-start justify-between gap-2"
+                >
+                  <span className="leading-relaxed">{note.content}</span>
+                  {note.is_priority && (
+                    <Sparkles size={13} className="text-amber-300 fill-amber-300 shrink-0 mt-0.5" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </PageShell>
   );

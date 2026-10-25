@@ -6,16 +6,28 @@ import type { Project } from '@/data';
 import DateTimePicker from '@/components/DateTimePicker';
 
 interface Props {
-  initialCategory?: 'essential' | 'focus';
+  initialCategory?: 'essential' | 'focus' | 'other';
+  initialDate?: string;
+  initialStartTime?: string;
+  initialDueTime?: string;
   onBack: () => void;
   onCreated: (task: TaskRow) => void;
 }
 
-export default function NewTaskPage({ initialCategory = 'focus', onBack, onCreated }: Props) {
+export default function NewTaskPage({
+  initialCategory = 'focus',
+  initialDate = '',
+  initialStartTime = '',
+  initialDueTime = '',
+  onBack,
+  onCreated,
+}: Props) {
   const [label, setLabel] = useState('');
+  const [category, setCategory] = useState<'essential' | 'focus' | 'other'>(() => initialCategory);
   const [difficulty, setDifficulty] = useState<'low' | 'medium' | 'high'>('medium');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
+  const [date, setDate] = useState(() => initialDate);
+  const [startTime, setStartTime] = useState(() => initialStartTime);
+  const [time, setTime] = useState(() => initialDueTime);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -29,6 +41,7 @@ export default function NewTaskPage({ initialCategory = 'focus', onBack, onCreat
   const categoryNameMap: Record<string, string> = {
     essential: 'Daily Essentials',
     focus: "Today's Focus",
+    other: 'Other Tasks',
   };
 
   const handleSave = async (e?: React.FormEvent) => {
@@ -40,15 +53,17 @@ export default function NewTaskPage({ initialCategory = 'focus', onBack, onCreat
       const selectedProj = projects.find((p) => p.id === projectId);
       const created = await createTask({
         label: label.trim(),
-        category: initialCategory,
+        category,
         priority: difficulty,
+        start_time: startTime.trim() ? startTime.trim() : null,
         due_time: time.trim() ? time.trim() : null,
         due_date: date.trim() ? date.trim() : null,
+        start_date: date.trim() ? date.trim() : null,
         project_id: projectId.trim() ? projectId : null,
         tag: selectedProj ? selectedProj.name : null,
-        is_priority: false, // Priority default off
+        is_priority: false,
         done: false,
-        task_type: initialCategory === 'essential' ? 'essential' : 'project',
+        task_type: category === 'essential' ? 'essential' : 'project',
       });
 
       if (created) {
@@ -79,7 +94,7 @@ export default function NewTaskPage({ initialCategory = 'focus', onBack, onCreat
         <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
           <div className="flex items-center gap-2 text-xs font-mono text-white/50">
             <span className="w-2 h-2 rounded-full bg-purple-400" />
-            <span>{categoryNameMap[initialCategory]}</span>
+            <span>Create New Task</span>
           </div>
           <button
             type="button"
@@ -92,7 +107,7 @@ export default function NewTaskPage({ initialCategory = 'focus', onBack, onCreat
         </div>
 
         {/* Blank Task Card Form */}
-        <form onSubmit={handleSave} className="space-y-5">
+        <form onSubmit={handleSave} className="space-y-4">
           <div className="w-full">
             <input
               type="text"
@@ -102,6 +117,32 @@ export default function NewTaskPage({ initialCategory = 'focus', onBack, onCreat
               placeholder="Task name"
               className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-purple-400/80 text-sm h-[46px] box-border"
             />
+          </div>
+
+          {/* Category Selector */}
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
+              Category
+            </span>
+            <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-0.5 gap-1">
+              {(['focus', 'essential', 'other'] as const).map((cat) => {
+                const isSelected = category === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                      isSelected
+                        ? 'bg-purple-600/40 text-purple-200 border border-purple-500/50'
+                        : 'text-white/40 hover:text-white'
+                    }`}
+                  >
+                    {categoryNameMap[cat]}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Time & Date: Month/Day + Time Point */}
@@ -114,10 +155,18 @@ export default function NewTaskPage({ initialCategory = 'focus', onBack, onCreat
             }}
           />
 
+          {/* Optional Start Time if dragging from timeline */}
+          {startTime && (
+            <div className="flex items-center justify-between text-xs font-mono text-sky-300 bg-sky-950/40 px-3 py-1.5 rounded-xl border border-sky-500/30">
+              <span>Time Slot:</span>
+              <span>{startTime} - {time || startTime}</span>
+            </div>
+          )}
+
           {/* 2. Difficulty Selection: Low / Mid / High */}
           <div className="flex items-center justify-between gap-2 pt-1">
             <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
-              2. Difficulty
+              Difficulty
             </span>
             <div className="flex items-center bg-white/5 border border-white/10 rounded-2xl p-1 gap-1">
               {(['low', 'medium', 'high'] as const).map((level) => {

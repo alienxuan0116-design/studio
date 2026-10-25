@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Compass, ChevronRight, X, Check } from 'lucide-react';
+import { Plus, Compass, ChevronRight, X, Check, Bookmark, Sparkles } from 'lucide-react';
 import PageShell from '../components/PageShell';
 import { loadProjects, createProject } from '@/lib/projects';
+import { loadScratchNotes, ScratchNote } from '@/lib/tasks';
 import type { Project } from '@/data';
 
 interface Props {
@@ -11,12 +12,17 @@ interface Props {
 
 export default function ProjectsPage({ onBack, onOpenProject }: Props) {
   const [projectList, setProjectList] = useState<Project[]>([]);
+  const [connectedNotes, setConnectedNotes] = useState<ScratchNote[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newVision, setNewVision] = useState('');
 
   useEffect(() => {
     setProjectList(loadProjects());
+    const notes = loadScratchNotes().filter(
+      (n) => n.is_organized && (n.target_category === 'finished_product' || n.target_category === 'project')
+    );
+    setConnectedNotes(notes);
   }, []);
 
   const handleCreate = (e: React.FormEvent) => {
@@ -102,6 +108,29 @@ export default function ProjectsPage({ onBack, onOpenProject }: Props) {
             </div>
           ))}
         </div>
+
+        {/* Connected Scratchpad Notes for Finished Product */}
+        {connectedNotes.length > 0 && (
+          <div className="pt-4 border-t border-white/10 space-y-2.5">
+            <div className="flex items-center gap-1.5 text-xs font-mono text-white/50 px-1">
+              <Bookmark size={13} className="text-purple-400" />
+              <span>Connected Notes: Finished Product ({connectedNotes.length})</span>
+            </div>
+            <div className="space-y-2">
+              {connectedNotes.map((note) => (
+                <div
+                  key={note.id}
+                  className="p-3.5 rounded-2xl bg-purple-950/20 border border-purple-500/20 text-xs text-purple-100/90 flex items-start justify-between gap-2"
+                >
+                  <span className="leading-relaxed">{note.content}</span>
+                  {note.is_priority && (
+                    <Sparkles size={13} className="text-amber-300 fill-amber-300 shrink-0 mt-0.5" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Create Project Modal */}

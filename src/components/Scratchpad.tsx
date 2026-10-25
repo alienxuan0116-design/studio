@@ -1,38 +1,54 @@
 import React, { useState } from 'react';
-import { Sparkles, X, Plus, FolderInput, CheckCircle2 } from 'lucide-react';
+import { Sparkles, X, Plus, FolderInput, CheckCircle2, ExternalLink, ArrowRightLeft } from 'lucide-react';
 import { ScratchNote, THREE_DAYS_MS } from '@/lib/tasks';
-import DateTimePicker from '@/components/DateTimePicker';
 
 export type ScratchpadCategoryOption =
   | 'essential'
-  | 'single'
-  | 'project'
-  | 'learning'
-  | 'other'
-  | 'focus';
+  | 'finished_product'
+  | 'major_category_learning';
 
 export interface ScratchpadCategoryDef {
   id: ScratchpadCategoryOption;
   label: string;
-  category: 'essential' | 'focus' | 'other';
-  task_type: 'essential' | 'single' | 'project' | 'learning';
+  destinationPage: 'routine' | 'projects' | 'categories';
+  description: string;
 }
 
 export const SCRATCHPAD_CATEGORIES: ScratchpadCategoryDef[] = [
-  { id: 'essential', label: 'Essential', category: 'essential', task_type: 'essential' },
-  { id: 'single', label: 'Single Task', category: 'focus', task_type: 'single' },
-  { id: 'project', label: 'Short-term Project', category: 'focus', task_type: 'project' },
-  { id: 'learning', label: 'Long-term Learning', category: 'focus', task_type: 'learning' },
+  {
+    id: 'essential',
+    label: 'Essential',
+    destinationPage: 'routine',
+    description: 'Connect to Daily Essentials module',
+  },
+  {
+    id: 'finished_product',
+    label: 'Finished Product',
+    destinationPage: 'projects',
+    description: 'Connect to Finished Product / Projects system',
+  },
+  {
+    id: 'major_category_learning',
+    label: 'Major Category / Learning',
+    destinationPage: 'categories',
+    description: 'Connect to Major Category & Learning system',
+  },
 ];
 
 export function getCategoryLabel(target?: string): string {
   if (!target) return 'Unorganized';
-  if (target === 'essential') return 'Essential';
-  if (target === 'single') return 'Single Task';
-  if (target === 'project' || target === 'focus') return 'Short-term Project';
-  if (target === 'learning') return 'Long-term Learning';
+  if (target === 'essential' || target === 'single') return 'Essential';
+  if (target === 'finished_product' || target === 'project' || target === 'focus') return 'Finished Product';
+  if (target === 'major_category_learning' || target === 'learning') return 'Major Category / Learning';
   if (target === 'other') return 'Other';
   return target;
+}
+
+export function getCategoryDestination(target?: string): 'routine' | 'projects' | 'categories' {
+  if (target === 'essential' || target === 'single') return 'routine';
+  if (target === 'finished_product' || target === 'project' || target === 'focus') return 'projects';
+  if (target === 'major_category_learning' || target === 'learning') return 'categories';
+  return 'routine';
 }
 
 interface ScratchpadProps {
@@ -43,10 +59,10 @@ interface ScratchpadProps {
   onToggleNotePriority: (noteId: string) => void;
   onOrganizeNote: (
     noteId: string,
-    category: ScratchpadCategoryOption,
-    options?: { priority?: 'high' | 'medium' | 'low'; time?: string; date?: string }
+    category: ScratchpadCategoryOption
   ) => void;
   onDeleteNote: (noteId: string) => void;
+  onNavigate?: (page: string) => void;
 }
 
 export function Scratchpad({
@@ -57,12 +73,11 @@ export function Scratchpad({
   onToggleNotePriority,
   onOrganizeNote,
   onDeleteNote,
+  onNavigate,
 }: ScratchpadProps) {
   const [newContent, setNewContent] = useState('');
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-  const [organizeDate, setOrganizeDate] = useState('');
-  const [organizeTime, setOrganizeTime] = useState('');
-  const [organizeDifficulty, setOrganizeDifficulty] = useState<'low' | 'medium' | 'high'>('medium');
+  const [reclassifyingNoteId, setReclassifyingNoteId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -78,8 +93,14 @@ export function Scratchpad({
       setExpandedNoteId(null);
     } else {
       setExpandedNoteId(noteId);
-      setOrganizeTime('');
-      setOrganizeDifficulty('medium');
+    }
+  };
+
+  const handleOpenDestination = (targetCategory?: string) => {
+    const dest = getCategoryDestination(targetCategory);
+    if (onNavigate) {
+      onNavigate(dest);
+      onClose();
     }
   };
 
@@ -181,80 +202,35 @@ export function Scratchpad({
                         </button>
                       </div>
 
-                      {/* Inline Organization Drawer on Same Page */}
+                      {/* Classification Options: Exactly 3 Options */}
                       {isExpanded && (
-                        <div className="mt-3 pt-3 border-t border-white/10 space-y-3 animate-in fade-in duration-100">
-                          <div className="flex items-center gap-1.5 text-[11px] text-white/50">
+                        <div className="mt-3 pt-3 border-t border-white/10 space-y-2 animate-in fade-in duration-100">
+                          <div className="flex items-center gap-1.5 text-[11px] text-white/50 mb-1.5">
                             <FolderInput size={13} className="text-white/40" />
-                            <span>Organize with Task Options:</span>
+                            <span>Connect to system:</span>
                           </div>
 
-                          {/* Options: 1. Month/Day + Time (Supports Today, Future Only) */}
-                          <div className="space-y-2.5">
-                            <DateTimePicker
-                              compact
-                              date={organizeDate}
-                              time={organizeTime}
-                              onChange={(d, t) => {
-                                setOrganizeDate(d);
-                                setOrganizeTime(t);
-                              }}
-                            />
-
-                            {/* 2. Difficulty: Low / Mid / High */}
-                            <div className="flex items-center justify-between gap-2 pt-0.5">
-                              <span className="text-[10px] font-mono uppercase tracking-wider text-white/45">
-                                2. Difficulty
-                              </span>
-                              <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-0.5 gap-1 shrink-0">
-                                {(['low', 'medium', 'high'] as const).map((level) => {
-                                  const isSel = organizeDifficulty === level;
-                                  const label = level === 'low' ? 'Easy' : level === 'medium' ? 'Medium' : 'Hard';
-                                  return (
-                                    <button
-                                      key={level}
-                                      type="button"
-                                      onClick={() => setOrganizeDifficulty(level)}
-                                      className={`px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${
-                                        isSel
-                                          ? level === 'high'
-                                            ? 'bg-rose-500/25 text-rose-300 border border-rose-500/40'
-                                            : level === 'medium'
-                                            ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40'
-                                            : 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40'
-                                          : 'text-white/40 hover:text-white'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Target Category Buttons to Save */}
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {SCRATCHPAD_CATEGORIES.map((cat) => (
-                                <button
-                                  key={cat.id}
-                                  type="button"
-                                  onClick={() => {
-                                    onOrganizeNote(note.id, cat.id, {
-                                      priority: organizeDifficulty,
-                                      time: organizeTime.trim() || undefined,
-                                      date: organizeDate.trim() || undefined,
-                                    });
-                                    setExpandedNoteId(null);
-                                    setOrganizeDate('');
-                                    setOrganizeTime('');
-                                    setOrganizeDifficulty('medium');
-                                  }}
-                                  className="flex-1 min-w-[90px] px-2.5 py-1.5 rounded-xl text-xs font-medium bg-white/5 hover:bg-purple-600/30 hover:text-purple-200 text-white/70 border border-white/10 hover:border-purple-500/40 transition-colors text-center"
-                                >
-                                  {cat.label}
-                                </button>
-                              ))}
-                            </div>
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {SCRATCHPAD_CATEGORIES.map((cat) => (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => {
+                                  onOrganizeNote(note.id, cat.id);
+                                  setExpandedNoteId(null);
+                                }}
+                                className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium bg-white/5 hover:bg-purple-600/30 hover:text-purple-200 text-white/80 border border-white/10 hover:border-purple-500/40 transition-all text-left group/btn"
+                              >
+                                <span className="font-semibold text-white/90">{cat.label}</span>
+                                <span className="text-[10px] text-white/40 group-hover/btn:text-purple-300 font-mono">
+                                  {cat.id === 'essential'
+                                    ? '→ Daily Essentials'
+                                    : cat.id === 'finished_product'
+                                    ? '→ Projects & Vision'
+                                    : '→ Categories & Learning'}
+                                </span>
+                              </button>
+                            ))}
                           </div>
                         </div>
                       )}
@@ -263,13 +239,13 @@ export function Scratchpad({
                 })}
               </div>
 
-              {/* 2. Organized Notes (Moved to Bottom, Strikethrough) */}
+              {/* 2. Organized Notes (Preserved content, connects to module, allows reclassification) */}
               {organizedNotes.length > 0 && (
                 <div className="pt-6 border-t border-white/10 mt-6 space-y-2">
                   <div className="flex items-center justify-between text-[11px] text-white/40 px-1 mb-2">
                     <span className="flex items-center gap-1.5">
-                      <CheckCircle2 size={13} className="text-white/40" />
-                      Organized (clears in 3 days)
+                      <CheckCircle2 size={13} className="text-emerald-400/70" />
+                      Connected Notes (clears in 3 days)
                     </span>
                     <span className="font-mono text-[10px]">{organizedNotes.length} notes</span>
                   </div>
@@ -279,36 +255,92 @@ export function Scratchpad({
                     const elapsed = note.organized_at ? Date.now() - note.organized_at : 0;
                     const remainingMs = Math.max(0, THREE_DAYS_MS - elapsed);
                     const remainingHours = Math.ceil(remainingMs / (3600 * 1000));
+                    const isReclassifying = reclassifyingNoteId === note.id;
 
                     return (
                       <div
                         key={note.id}
-                        className="flex items-center justify-between p-3 rounded-2xl border border-white/5 bg-white/[0.02] text-white/40"
+                        className="p-3 rounded-2xl border border-white/5 bg-white/[0.02] text-white/70 space-y-2 hover:border-white/15 transition-all"
                       >
-                        <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
-                          <span className="line-through truncate text-xs text-white/45">
-                            {note.content}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-[10px] shrink-0 font-mono">
-                          {categoryLabel && (
-                            <span className="px-2 py-0.5 rounded-md bg-white/5 text-white/60">
-                              {categoryLabel}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <span className="text-xs text-white/80 block leading-relaxed break-words">
+                              {note.content}
                             </span>
-                          )}
-                          <span className="text-white/35" title="Remaining time before scratchpad purge">
-                            {remainingHours}h
-                          </span>
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => onDeleteNote(note.id)}
                             aria-label="Delete note"
-                            className="text-white/30 hover:text-rose-400 p-0.5"
+                            className="text-white/30 hover:text-rose-400 p-0.5 shrink-0"
+                            title="Remove note"
                           >
-                            <X size={12} />
+                            <X size={13} />
                           </button>
                         </div>
+
+                        {/* Controls & Connection Row */}
+                        <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/5 gap-1.5 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            {/* Clickable Destination Badge to Open Connected Module */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDestination(note.target_category)}
+                              title={`Open ${categoryLabel} destination`}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/30 text-purple-200 border border-purple-500/30 font-medium transition-colors"
+                            >
+                              <span>{categoryLabel}</span>
+                              <ExternalLink size={10} className="text-purple-300" />
+                            </button>
+
+                            {/* Reclassify button */}
+                            <button
+                              type="button"
+                              onClick={() => setReclassifyingNoteId(isReclassifying ? null : note.id)}
+                              title="Reclassify note destination"
+                              className="flex items-center gap-0.5 px-2 py-1 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors font-mono"
+                            >
+                              <ArrowRightLeft size={10} />
+                              <span>Reclassify</span>
+                            </button>
+                          </div>
+
+                          <span className="text-white/30 font-mono" title="Retention period">
+                            {remainingHours}h left
+                          </span>
+                        </div>
+
+                        {/* Reclassify Drawer: Allow switching between the 3 options */}
+                        {isReclassifying && (
+                          <div className="pt-2 border-t border-white/5 grid grid-cols-1 gap-1 animate-in fade-in duration-100">
+                            <div className="text-[10px] text-white/40 font-mono mb-1">
+                              Switch destination to:
+                            </div>
+                            {SCRATCHPAD_CATEGORIES.map((cat) => {
+                              const isCurrent = note.target_category === cat.id;
+                              return (
+                                <button
+                                  key={cat.id}
+                                  type="button"
+                                  disabled={isCurrent}
+                                  onClick={() => {
+                                    onOrganizeNote(note.id, cat.id);
+                                    setReclassifyingNoteId(null);
+                                  }}
+                                  className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] transition-all text-left ${
+                                    isCurrent
+                                      ? 'bg-purple-600/30 text-purple-200 border border-purple-400/40 cursor-default'
+                                      : 'bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/5'
+                                  }`}
+                                >
+                                  <span>{cat.label}</span>
+                                  {isCurrent && <span className="text-[9px] font-mono text-purple-300">Current</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

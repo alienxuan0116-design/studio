@@ -3,6 +3,7 @@ import { Check, Plus, Sparkles, PenLine } from 'lucide-react';
 import TaskList from '@/components/TaskList';
 import DateTimeCards from '@/components/DateTimeCards';
 import Timeline from '@/components/Timeline';
+import WeeklyTimeline from '@/components/WeeklyTimeline';
 import ProjectProgress from '@/components/ProjectProgress';
 import IdeaButton from '@/components/IdeaButton';
 import CollapsibleSection from '@/components/CollapsibleSection';
@@ -76,6 +77,7 @@ export default function App() {
   const [projectList, setProjectList] = useState<Project[]>([]);
   const [scratchNotes, setScratchNotes] = useState<ScratchNote[]>([]);
   const [isScratchpadOpen, setIsScratchpadOpen] = useState(false);
+  const [expandedHomeSection, setExpandedHomeSection] = useState<'essentials' | 'focus' | null>(null);
 
   const scrollRestoreRef = useRef<number | null>(null);
 
@@ -229,32 +231,10 @@ export default function App() {
     saveScratchNotes(next);
   };
 
-  const handleOrganizeScratchNote = async (
+  const handleOrganizeScratchNote = (
     noteId: string,
-    categoryOption: ScratchpadCategoryOption,
-    options?: { priority?: 'high' | 'medium' | 'low'; time?: string; date?: string }
+    categoryOption: ScratchpadCategoryOption
   ) => {
-    const note = scratchNotes.find((n) => n.id === noteId);
-    if (!note || note.is_organized) return;
-
-    const catDef = SCRATCHPAD_CATEGORIES.find((c) => c.id === categoryOption) || {
-      category: 'focus' as const,
-      task_type: 'single' as const,
-    };
-
-    // 1. 创建正式任务进入对应分类与类型，保留重点状态，并应用指定的难度、时间与日期
-    const created = await createTask({
-      label: note.content,
-      category: catDef.category,
-      task_type: catDef.task_type,
-      priority: options?.priority || 'medium',
-      due_time: options?.time || null,
-      due_date: options?.date || null,
-      is_priority: note.is_priority, // 保留重点状态
-      done: false,
-    });
-
-    // 2. 速记板中对应记录显示划掉状态，移动至底部，记录 organized_at 时间戳
     const nextNotes = scratchNotes.map((n) =>
       n.id === noteId
         ? {
@@ -262,15 +242,11 @@ export default function App() {
             is_organized: true,
             organized_at: Date.now(),
             target_category: categoryOption,
-            linked_task_id: created?.id,
           }
         : n
     );
     setScratchNotes(nextNotes);
     saveScratchNotes(nextNotes);
-
-    // 刷新任务列表
-    loadAll();
   };
 
   const handleDeleteScratchNote = (noteId: string) => {
@@ -392,6 +368,23 @@ export default function App() {
     return (
       <SchedulePage
         initialFocus="calendar"
+        onBack={back}
+        onOpenTask={openTask}
+        onOpenProject={(id) => {
+          setActiveProjectId(id);
+          setPage('project-detail');
+        }}
+        onOpenResearch={(projectId, partId, subtaskId) => {
+          setActiveProjectId(projectId);
+          setActiveResearch({ projectId, partId, subtaskId });
+          setPage('research');
+        }}
+      />
+    );
+  if (page === 'weekly')
+    return (
+      <SchedulePage
+        initialFocus="weekly"
         onBack={back}
         onOpenTask={openTask}
         onOpenProject={(id) => {
@@ -568,16 +561,19 @@ export default function App() {
             {/* Weather strip */}
             <WeatherStrip />
 
-            {/* 2. Schedule / Timeline */}
-            <div id="schedule">
+            {/* 2. Schedule: Timeline & Weekly Timeline Cards */}
+            <div id="schedule" className="space-y-5 sm:space-y-6">
               <Timeline onNavigate={navigate} />
+              <WeeklyTimeline onNavigate={navigate} />
             </div>
 
-            {/* 3. Essential / 必备: + 添加任务，○ 打开分类详情页 */}
+            {/* 3. Essential / 必备: Mutually collapsible with Today's Focus */}
             <CollapsibleSection
               kicker="Daily"
               title="Essentials"
               defaultVisibleCount={3}
+              isExpanded={expandedHomeSection === 'essentials'}
+              onToggleExpand={(exp) => setExpandedHomeSection(exp ? 'essentials' : null)}
               onAdd={() => handleOpenNewTask('essential')}
               onNavigate={() => navigate('routine')}
             >
@@ -611,12 +607,14 @@ export default function App() {
               />
             </div>
 
-            {/* 5. Today's Focus: 包含独立焦点任务与加入 Today's Focus 的制作/研究子任务 */}
+            {/* 5. Today's Focus: Mutually collapsible with Essentials */}
             <div id="focus">
               <CollapsibleSection
                 kicker="Priority"
                 title="Today's Focus"
                 defaultVisibleCount={3}
+                isExpanded={expandedHomeSection === 'focus'}
+                onToggleExpand={(exp) => setExpandedHomeSection(exp ? 'focus' : null)}
                 onAdd={() => handleOpenNewTask('focus')}
                 onNavigate={() => navigate('focus-detail')}
               >
@@ -667,6 +665,7 @@ export default function App() {
         onToggleNotePriority={handleToggleScratchNotePriority}
         onOrganizeNote={handleOrganizeScratchNote}
         onDeleteNote={handleDeleteScratchNote}
+        onNavigate={navigate}
       />
     </>
   );

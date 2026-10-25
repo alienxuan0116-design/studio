@@ -17,7 +17,36 @@ export interface TimetableClass {
   createdAt: number;
 }
 
-const TIMETABLE_STORAGE_KEY = 'planetwork_timetable_v1';
+export const TIMETABLE_STORAGE_KEY = 'planetwork_timetable_v1';
+export const TIMETABLE_VISIBILITY_STORAGE_KEY = 'planetwork_timetable_visible_v1';
+
+let memoryTimetableVisible: boolean | null = null;
+
+export function getTimetableVisible(): boolean {
+  if (typeof window === 'undefined') {
+    return memoryTimetableVisible ?? true;
+  }
+  try {
+    const raw = localStorage.getItem(TIMETABLE_VISIBILITY_STORAGE_KEY);
+    if (raw === null) return true; // Default visible
+    return raw === 'true';
+  } catch {
+    return true;
+  }
+}
+
+export function setTimetableVisible(visible: boolean): void {
+  memoryTimetableVisible = visible;
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(TIMETABLE_VISIBILITY_STORAGE_KEY, String(visible));
+    window.dispatchEvent(
+      new CustomEvent('studio_os_timetable_visibility_changed', { detail: visible })
+    );
+  } catch {
+    // fallback
+  }
+}
 
 export const WEEKDAY_NAMES = [
   'Sunday',
@@ -164,7 +193,10 @@ export function deleteTimetableClass(id: string): void {
  * Extracts the weekday and matches recurring timetable rules.
  * Generates no duplicate tasks.
  */
-export function getClassesForDate(dateStr: string): TimetableClass[] {
+export function getClassesForDate(dateStr: string, includeHidden = false): TimetableClass[] {
+  if (!includeHidden && !getTimetableVisible()) {
+    return [];
+  }
   if (!dateStr) return [];
   const parts = dateStr.split('-');
   if (parts.length !== 3) return [];

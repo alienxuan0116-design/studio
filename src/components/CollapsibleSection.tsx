@@ -9,6 +9,9 @@ interface Props {
   defaultVisibleCount?: number;
   onNavigate?: () => void;
   onAdd?: () => void;
+  /** Controlled expansion state */
+  isExpanded?: boolean;
+  onToggleExpand?: (expanded: boolean) => void;
   /** Render function: receives how many items to show (0 = hidden, -1 = all). */
   children: (visibleCount: number) => ReactNode;
 }
@@ -19,10 +22,21 @@ export default function CollapsibleSection({
   defaultVisibleCount = 0,
   onNavigate,
   onAdd,
+  isExpanded,
+  onToggleExpand,
   children,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const expanded = isExpanded !== undefined ? isExpanded : internalExpanded;
   const visibleCount = expanded ? -1 : defaultVisibleCount;
+
+  const handleToggle = () => {
+    if (onToggleExpand) {
+      onToggleExpand(!expanded);
+    } else {
+      setInternalExpanded(!internalExpanded);
+    }
+  };
 
   const showChevron = defaultVisibleCount !== -1;
 
@@ -30,7 +44,7 @@ export default function CollapsibleSection({
     <section className="glass glass-glow rounded-3xl p-4 sm:p-6">
       <div className="flex items-start justify-between gap-2">
         <button
-          onClick={() => setExpanded(!expanded)}
+          onClick={handleToggle}
           className="flex-1 flex items-center justify-between text-left group rounded-2xl p-1.5 -m-1.5 hover:bg-white/5 transition-colors"
           aria-expanded={expanded}
         >
